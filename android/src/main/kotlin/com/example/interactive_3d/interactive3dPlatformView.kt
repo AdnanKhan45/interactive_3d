@@ -20,7 +20,9 @@ class Interactive3dPlatformView(
     messenger: BinaryMessenger,
     id: Int
 ) : PlatformView, MethodChannel.MethodCallHandler, EventChannel.StreamHandler {
+    // This is the view that will be returned to Flutter
     private var customView: ModelView
+    // These are channels that will be used to communicate with Flutter
     private var eventSink: EventChannel.EventSink? = null
     private val methodChannel = MethodChannel(messenger, "interactive_3d_$id")
     private val eventChannel = EventChannel(messenger, "interactive_3d_events_$id")
@@ -30,11 +32,15 @@ class Interactive3dPlatformView(
     }
 
     init {
+        // Workaround to get the activity from the context
         val v = (context as MutableContextWrapper).baseContext as Activity
+        // Initialize the custom view
         customView = ModelView(v)
+
         methodChannel.setMethodCallHandler(this)
         eventChannel.setStreamHandler(this)
 
+        // Set the selection listener
         customView.setSelectionListener(object : ModelView.SelectionListener {
             override fun onSelectionChanged(selectedEntities: List<Map<String, Any>>) {
                 // Now you can use eventSink?.success here
@@ -50,6 +56,7 @@ class Interactive3dPlatformView(
         })
     }
 
+    // This is the main handler that will be used to post tasks to the main thread
     companion object {
         init {
             Utils.init()
@@ -58,27 +65,33 @@ class Interactive3dPlatformView(
         private const val TAG = "Interactive3d"
     }
 
+    // This method is called when Flutter requests the view
     override fun getView(): ModelView {
         return customView
     }
 
+    // This method is called when the view is destroyed
     override fun dispose() {
         Log.e(TAG, "dispose: PlatformView Dispose")
     }
 
+    // This method is called when Flutter sends a message to the platform
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         Log.e(TAG, "onMethodCall: ${call.method}")
         when (call.method) {
             "loadModel" -> {
                 val modelBytes = call.argument<ByteArray>("modelBytes")
-                if (modelBytes != null) {
+                val modelName = call.argument<String>("name")
+                val resources = call.argument<Map<String, ByteArray>>("resources") ?: emptyMap()
+
+                if (modelBytes != null && modelName != null) {
                     val buffer = ByteBuffer.wrap(modelBytes)
                     mainHandler.post {
-                        customView.setModel(buffer)
+                        customView.setModel(buffer, modelName, resources)
                         result.success(null)
                     }
                 } else {
-                    result.error("INVALID_ARGUMENT", "modelBytes is null", null)
+                    result.error("INVALID_ARGUMENT", "modelBytes or modelName is null", null)
                 }
             }
 
@@ -102,10 +115,12 @@ class Interactive3dPlatformView(
         }
     }
 
+    // This method is called when Flutter listens to the event channel
     override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
         eventSink = events
     }
 
+    // This method is called when Flutter cancels the event channel
     override fun onCancel(arguments: Any?) {
         eventSink = null
     }

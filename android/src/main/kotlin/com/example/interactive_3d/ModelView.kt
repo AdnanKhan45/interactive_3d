@@ -23,18 +23,30 @@ import com.google.android.filament.utils.ModelViewer
 import java.nio.ByteBuffer
 import java.util.concurrent.Executor
 
+// Custom view for 3D model rendering
 class ModelView : LinearLayout {
+
     val TAG = "ModelView"
 
+    // The surface view for rendering the 3D model
     private lateinit var surfaceView: SurfaceView
+    // The choreographer for scheduling frame callbacks
     private lateinit var choreographer: Choreographer
+    // The frame scheduler for rendering the 3D model
     private val frameScheduler = FrameCallback()
+    // The model viewer for rendering the 3D model
     private lateinit var modelViewer: ModelViewer
+    // The automation engine for running automation scripts
     private val automation = AutomationEngine()
+    // The viewer content for the model viewer
     private val viewerContent = AutomationEngine.ViewerContent()
+    // The single-tap detector for picking entities
     private lateinit var singleTapDetector: GestureDetector
     private val singleTapListener = SingleTapListener()
+    // The set of selected entities
     private var selectedEntities = mutableSetOf<Int>()
+    // The map of resources only for .gltf models
+    private val resourceMap = mutableMapOf<String, ByteBuffer>()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val mainExecutor = Executor { command ->
         mainHandler.post(command)
@@ -81,10 +93,12 @@ class ModelView : LinearLayout {
 
     @SuppressLint("ClickableViewAccessibility")
     private fun init(context: Context?) {
-        // Utils.init()
+
+        // Inflate the custom view layout
         val inflated = LayoutInflater.from(context).inflate(R.layout.custom_view, this, true)
         surfaceView = inflated.findViewById(R.id.main_sv);
 
+        // Set the touch listener for the surface view
         surfaceView.setOnTouchListener { _, event ->
             modelViewer.onTouchEvent(event)
             singleTapDetector.onTouchEvent(event)
@@ -167,8 +181,28 @@ class ModelView : LinearLayout {
         })
     }
 
-    fun setModel(buffer: ByteBuffer) {
-        modelViewer.loadModelGlb(buffer)
+    // Load the model from the given buffer
+    fun setModel(buffer: ByteBuffer, fileName: String, resources: Map<String, ByteArray>) {
+        resources.forEach { (key, value) ->
+            resourceMap[key] = ByteBuffer.wrap(value)
+        }
+
+        if (fileName.endsWith(".gltf", ignoreCase = true)) {
+            modelViewer.loadModelGltfAsync(buffer) { resourcePath ->
+                (resourceMap[resourcePath] ?: run {
+                    Log.e(TAG, "Missing resource: $resourcePath")
+                    null
+                })!!
+            }
+            Log.d(TAG, "Loaded GLTF model: $fileName")
+        } else if (fileName.endsWith(".glb", ignoreCase = true)) {
+            modelViewer.loadModelGlb(buffer)
+            Log.d(TAG, "Loaded GLB model: $fileName")
+        } else {
+            Log.e(TAG, "Unsupported model format: $fileName")
+            return
+        }
+
         if (automation.viewerOptions.autoScaleEnabled) {
             modelViewer.transformToUnitCube()
         } else {
@@ -176,7 +210,7 @@ class ModelView : LinearLayout {
         }
     }
 
-
+    // Load the lights from the given buffers
     fun setLights(skyBox: ByteBuffer, indirectLight: ByteBuffer) {
         val engine = modelViewer.engine
         val scene = modelViewer.scene
@@ -186,6 +220,7 @@ class ModelView : LinearLayout {
         scene.skybox = KTX1Loader.createSkybox(engine, skyBox)
     }
 
+    // Set the view options for the model viewer
     fun setViewOptions() {
         val view = modelViewer.view
 
@@ -286,6 +321,7 @@ class ModelView : LinearLayout {
         }
     }
 
+    // Set the color of the renderable
     private fun setRenderableColor(renderable: Int, r: Float, g: Float, b: Float, a: Float) {
         val engine = modelViewer.engine
         val rcm = engine.renderableManager
@@ -305,6 +341,7 @@ class ModelView : LinearLayout {
         }
     }
 
+    // Reset the color of the renderable
     private fun resetRenderableColor(renderable: Int) {
         val engine = modelViewer.engine
         val rcm = engine.renderableManager
