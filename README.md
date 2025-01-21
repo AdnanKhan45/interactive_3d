@@ -1,5 +1,7 @@
 # interactive_3d [![Pub](https://img.shields.io/pub/v/interactive_3d.svg)](https://pub.dev/packages/interactive_3d)
 
+![Logo](assets/FlutterFilament_logo.png)
+
 `interactive_3d` is an open-source Flutter plugin for rendering interactive 3d models `.glb` or `.gltf` using the Filament Engine. Currently supported only on Android. The code is available open-source with MIT license, your contribution to this would highly be appreciated.
 
 > Mainly inspired having healthcare problem in mind, to have a 3D model from where users can interact with the model and describe their complaints about any part of the body, specific or full human body. I want to take it to the next level with the help of **YOU** 🫵 and the great **Flutter community** 💙.
