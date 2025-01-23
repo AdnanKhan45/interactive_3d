@@ -88,3 +88,11 @@ class Interactive3dState extends State<Interactive3d> {
     widget.onSelectionChanged?.call(selectedEntities);
   }
 }
+
+class EntityData {
+  final int id;
+  final String name;
+
+  EntityData({required this.id, required this.name});
+}
+

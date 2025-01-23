@@ -1,4 +1,5 @@
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
+import 'interactive_3d.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -20,11 +21,4 @@ abstract class Interactive3dPlatform extends PlatformInterface {
 
   /// Stream to receive selection changes.
   Stream<List<EntityData>> get selectionStream;
-}
-
-class EntityData {
-  final int id;
-  final String name;
-
-  EntityData({required this.id, required this.name});
 }

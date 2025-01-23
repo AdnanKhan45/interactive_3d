@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
-import 'interactive_3d_platform_interface.dart';
+import 'interactive_3d.dart';
 
 class MethodChannelInteractive3d extends Interactive3dPlatform {
   final MethodChannel _methodChannel;
