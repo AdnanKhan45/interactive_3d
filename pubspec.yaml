@@ -1,7 +1,11 @@
 name: interactive_3d
 description: "A plugin to render interactive 3D model in .gLTF or .glb"
 version: 0.0.1
-homepage:
+
+license: MIT
+
+repository: https://github.com/AdnanKhan45/interactive_3d/tree/main
+homepage: https://github.com/AdnanKhan45/interactive_3d/blob/main/lib/interactive_3d.dart
 
 environment:
   sdk: ^3.6.0
