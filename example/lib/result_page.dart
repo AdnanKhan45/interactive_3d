@@ -1,6 +1,6 @@
 
 import 'package:flutter/material.dart';
-import 'package:interactive_3d/interactive_3d_platform_interface.dart';
+import 'package:interactive_3d/interactive_3d.dart';
 
 class ResultPage extends StatefulWidget {
   final List<EntityData> data;
