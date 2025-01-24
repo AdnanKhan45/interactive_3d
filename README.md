@@ -23,7 +23,7 @@
 </p>
 
 ## Bugs
-🪲 PlatformView (Flutter Embedded) & SurfaceView (Android) lifecycle conflicts and leading to model don't load back when taking app to background (Paused) and bringing back to foreground (Resumed) states, this is the main bug I'm actively working on. [Explore Bug](URL)
+🪲 PlatformView (Flutter Embedded) & SurfaceView (Android) lifecycle conflicts and leading to model don't load back when taking app to background (Paused) and bringing back to foreground (Resumed) states, this is the main bug I'm actively working on. [Explore Bug](https://medium.com/@ak187429/every-innovation-is-an-idea-before-it-turns-into-reality-6547e47ca23f)
 
 🪲 IBL and SKYBOX background view not changing from the path provided on Flutter side, this one is currently not in my priority list because there are other major ones I'm already working on, if you've time you can check into this one too.
 
