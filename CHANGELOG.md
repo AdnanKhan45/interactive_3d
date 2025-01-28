@@ -1,3 +1,11 @@
+## 0.0.2
+
+* 2nd release of `interactive_3d`.
+- Features:
+    - App lifecycle crash fixed.
+    - Load models background environments ibl and skybox `.ktx` files fix.
+    - Code refactored.
+
 ## 0.0.1
 
 * Initial release of `interactive_3d`.
