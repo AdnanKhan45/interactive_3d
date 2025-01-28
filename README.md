@@ -10,9 +10,23 @@
 
 ✅  Render 3D models of type `.glb` and `.gltf`.
 
+✅  Load models background environments ibl and skybox `.ktx` files.
+
 ✅  Interactive gestures to rotate, pan, and tap on models.
 
 ✅  Extract data from interactions and use it in your flutter app.
+
+## Generate IBL & Skybox
+
+IBL captures the lighting environment from an HDR image, providing indirect lighting information for reflections and ambient light. The Skybox defines the scene's background, simulating the surrounding environment. To generate these, acquire a high-quality HDR image from [Poly Haven](https://polyhaven.com/) or some other website. Download Filament latest build for your OS from [Here](https://github.com/google/filament/releases), open `bin` directory in your terminal or set PATH in your shell to directly use `cmgen`. `cmgen` is a command-line tool provided by the Filament graphics engine. It's specifically designed to generate Image-Based Lighting (IBL) data and skybox textures from high-dynamic-range (HDR) images. Now that `cmgen` is set up, and you have a downloaded `.hdr` file. Run the following command to generate `.ktx` files.
+
+```
+cmgen --format=ktx --deploy=output_file_name output_directory
+```
+For example:
+```
+cmgen --format=ktx --deploy=san_guiseppe ~/Downloads/san_giuseppe_bridge_4k.hdr 
+```
 
 ## Demo
 
@@ -22,17 +36,15 @@
  <img src="https://media.giphy.com/media/YTh9FdZIaIqZd6KXR6/giphy.gif" width=200 />
 </p>
 
-## Bugs
-🪲 PlatformView (Flutter Embedded) & SurfaceView (Android) lifecycle conflicts and leading to model don't load back when taking app to background (Paused) and bringing back to foreground (Resumed) states, this is the main bug I'm actively working on. [Explore Bug](https://medium.com/@ak187429/every-innovation-is-an-idea-before-it-turns-into-reality-6547e47ca23f)
-
-🪲 IBL and SKYBOX background view not changing from the path provided on Flutter side, this one is currently not in my priority list because there are other major ones I'm already working on, if you've time you can check into this one too.
-
 ## Future features
 I'm actively working on this plugin and currently focusing mainly on Android. Below mentioned features will be added, if you have something great in mind and want to contribute, MOST WELCOME 🤗
 
+🚀 Light customization support
+
+🚀 Camera customization support
+
 🚀 Add horizontal scroll indicators to hide or show specific parts of the model.
 
-🚀 Optimize performance and fix existing bugs.
 
 ## Installation
 

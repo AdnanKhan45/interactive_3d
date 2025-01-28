@@ -21,9 +21,9 @@ class _GlbLoaderExampleState
         children: [
           Expanded(
               child: Interactive3d(
-                modelPath: 'assets/models/heart.glb',
-                iblPath: 'assets/models/venetian_crossroads_2k_ibl.ktx',
-                skyboxPath: 'assets/models/venetian_crossroads_2k_skybox.ktx',
+                modelPath: 'assets/models/Tooth-3.glb',
+                iblPath: 'assets/models/giuseppe_bridge_4k_ibl.ktx',
+                skyboxPath: 'assets/models/giuseppe_bridge_4k_skybox.ktx',
                 onSelectionChanged: (selectedEntities) {
                   setState(() {
                     _selectedEntities = selectedEntities;
@@ -39,6 +39,7 @@ class _GlbLoaderExampleState
                 final entity = _selectedEntities[index];
                 return ListTile(
                   onTap: () {
+                    // Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => ResultPage(data: _selectedEntities)), (route) => false);
                     Navigator.of(context).push(MaterialPageRoute(
                         builder: (context) => ResultPage(data: _selectedEntities)));
                   },

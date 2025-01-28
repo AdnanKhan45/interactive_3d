@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.MutableContextWrapper
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
@@ -71,13 +70,10 @@ class Interactive3dPlatformView(
     }
 
     // This method is called when the view is destroyed
-    override fun dispose() {
-        Log.e(TAG, "dispose: PlatformView Dispose")
-    }
+    override fun dispose() {}
 
     // This method is called when Flutter sends a message to the platform
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
-        Log.e(TAG, "onMethodCall: ${call.method}")
         when (call.method) {
             "loadModel" -> {
                 val modelBytes = call.argument<ByteArray>("modelBytes")
