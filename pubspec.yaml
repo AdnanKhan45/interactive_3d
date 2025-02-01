@@ -1,5 +1,5 @@
 name: interactive_3d
-description: "A plugin to render interactive 3D model in .gLTF or .glb"
+description: "A plugin to render interactive 3D model in .gLTF or .glb format using Filament Engine"
 version: 0.0.2
 
 license: MIT

@@ -1,9 +1,9 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'interactive_3d_method_channel.dart';
 import 'interactive_3d_platform_interface.dart';
+import 'dart:io';
 
 class Interactive3d extends StatefulWidget {
   final String modelPath;
@@ -13,13 +13,13 @@ class Interactive3d extends StatefulWidget {
   final void Function(List<EntityData>)? onSelectionChanged;
 
   const Interactive3d({
-    Key? key,
+    super.key,
     required this.modelPath,
     required this.iblPath,
     required this.skyboxPath,
     this.onSelectionChanged,
     this.resources = const [],
-  }) : super(key: key);
+  });
 
   @override
   Interactive3dState createState() => Interactive3dState();
@@ -32,11 +32,29 @@ class Interactive3dState extends State<Interactive3d> {
 
   @override
   Widget build(BuildContext context) {
-    return AndroidView(
-      key: const ValueKey('interactive_3d'),
-      viewType: 'interactive_3d',
-      onPlatformViewCreated: _onPlatformViewCreated,
-    );
+    if(Platform.isIOS) {
+      return UiKitView(
+        viewType: 'interactive_3d',
+        onPlatformViewCreated: _onPlatformViewCreated,
+        creationParams: _creationParams(),
+        creationParamsCodec: const StandardMessageCodec(),
+      );
+    } else {
+      return AndroidView(
+        key: const ValueKey('interactive_3d'),
+        viewType: 'interactive_3d',
+        onPlatformViewCreated: _onPlatformViewCreated,
+      );
+    }
+  }
+
+  dynamic _creationParams() {
+    return {
+      'modelPath': widget.modelPath,
+      'iblPath': widget.iblPath,
+      'skyboxPath': widget.skyboxPath,
+      'resources': widget.resources,
+    };
   }
 
   Future<void> _onPlatformViewCreated(int id) async {
