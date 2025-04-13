@@ -33,7 +33,11 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
   }
 
   @override
-  Future<void> loadModel(String modelPath, Map<String, ByteData> resources) async {
+  Future<void> loadModel(
+      String modelPath,
+      Map<String, ByteData> resources, {
+        List<String>? preselectedEntities,
+      }) async {
     // Convert the main model to bytes.
     ByteData modelData = await rootBundle.load(modelPath);
     Uint8List modelBytes = modelData.buffer.asUint8List();
@@ -46,7 +50,8 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
     final args = {
       'modelBytes': modelBytes,
       'name': modelPath.split('/').last,
-      'resources': resourceMap
+      'resources': resourceMap,
+      'preselectedEntities': preselectedEntities,
     };
 
     await _methodChannel.invokeMethod('loadModel', args);

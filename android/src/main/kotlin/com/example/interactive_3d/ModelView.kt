@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.Application
 import android.content.Context
-import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
@@ -16,8 +15,6 @@ import android.view.MotionEvent
 import android.view.TextureView
 import android.widget.LinearLayout
 import com.google.android.filament.Fence
-import com.google.android.filament.Fence.FenceStatus
-import com.google.android.filament.Fence.Mode
 import com.google.android.filament.View
 import com.google.android.filament.utils.AutomationEngine
 import com.google.android.filament.utils.KTX1Loader
@@ -58,7 +55,7 @@ class ModelView : LinearLayout {
     private val singleTapListener = SingleTapListener()
 
     // Keep track of picked entities.
-    private var selectedEntities = mutableSetOf<Int>()
+    private val selectedEntities = mutableSetOf<Int>()
 
     // For .gltf external resource support.
     private val resourceMap = mutableMapOf<String, ByteBuffer>()
@@ -66,6 +63,10 @@ class ModelView : LinearLayout {
     // Main thread executor for pick callbacks, etc.
     private val mainHandler = Handler(Looper.getMainLooper())
     private val mainExecutor = Executor { command -> mainHandler.post(command) }
+
+    // Track preselected entities to be applied after model load
+    private var pendingPreselectedEntities: List<String>? = null
+    private var modelLoaded = false
 
     // Callback interface to report selection changes back to the caller.
     interface SelectionListener {
@@ -79,10 +80,8 @@ class ModelView : LinearLayout {
     //region Constructors
     constructor(context: Context?) : super(context) { init(context) }
     constructor(context: Context?, attrs: AttributeSet?) : super(context, attrs) { init(context) }
-    constructor(context: Context?, attrs: AttributeSet?, defStyleAttr: Int)
-            : super(context, attrs, defStyleAttr) { init(context) }
-    constructor(context: Context?, attrs: AttributeSet?, defStyleAttr: Int, defStyleRes: Int)
-            : super(context, attrs, defStyleAttr, defStyleRes) { init(context) }
+    constructor(context: Context?, attrs: AttributeSet?, defStyleAttr: Int) : super(context, attrs, defStyleAttr) { init(context) }
+    constructor(context: Context?, attrs: AttributeSet?, defStyleAttr: Int, defStyleRes: Int) : super(context, attrs, defStyleAttr, defStyleRes) { init(context) }
     //endregion
 
     @SuppressLint("ClickableViewAccessibility")
@@ -114,27 +113,41 @@ class ModelView : LinearLayout {
 
         // Activity lifecycle handling to pause/resume rendering.
         (context as? Activity)?.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
-            override fun onActivityCreated(a: Activity, b: Bundle?) {}
-            override fun onActivityStarted(a: Activity) {}
-            override fun onActivityResumed(a: Activity) {
+            override fun onActivityCreated(activity: Activity, savedInstanceState: android.os.Bundle?) {}
+            override fun onActivityStarted(activity: Activity) {}
+            override fun onActivityResumed(activity: Activity) {
                 choreographer.postFrameCallback(frameScheduler)
             }
-            override fun onActivityPaused(a: Activity) {
+            override fun onActivityPaused(activity: Activity) {
                 choreographer.removeFrameCallback(frameScheduler)
             }
-            override fun onActivityStopped(a: Activity) {}
-            override fun onActivitySaveInstanceState(a: Activity, b: Bundle) {}
-            override fun onActivityDestroyed(a: Activity) {
+            override fun onActivityStopped(activity: Activity) {}
+            override fun onActivitySaveInstanceState(activity: Activity, outState: android.os.Bundle) {}
+            override fun onActivityDestroyed(activity: Activity) {
                 choreographer.removeFrameCallback(frameScheduler)
-                 modelViewer.destroyModel()
+                modelViewer.destroyModel()
             }
         })
     }
 
     /**
-     * Load a 3D model (GLB or GLTF). We create a fence to measure GPU load completion time.
+     * Load a 3D model (GLB or GLTF) with optional preselected entities.
+     */
+    fun setModel(
+        buffer: ByteBuffer,
+        fileName: String,
+        resources: Map<String, ByteArray>,
+        preselectedEntities: List<String>?
+    ) {
+        this.pendingPreselectedEntities = preselectedEntities
+        setModel(buffer, fileName, resources)
+    }
+
+    /**
+     * Load a 3D model (GLB or GLTF).
      */
     fun setModel(buffer: ByteBuffer, fileName: String, resources: Map<String, ByteArray>) {
+        modelLoaded = false
         resources.forEach { (key, value) ->
             resourceMap[key] = ByteBuffer.wrap(value)
         }
@@ -143,7 +156,7 @@ class ModelView : LinearLayout {
             modelViewer.loadModelGltfAsync(buffer) { resourcePath ->
                 resourceMap[resourcePath] ?: run {
                     Log.e(TAG, "Missing resource: $resourcePath")
-                    ByteBuffer.allocate(0) // Return empty buffer if not found.
+                    ByteBuffer.allocate(0)
                 }
             }
             Log.d(TAG, "Loaded GLTF model: $fileName")
@@ -165,6 +178,7 @@ class ModelView : LinearLayout {
         // Start timing the backend load with a fence.
         loadStartTime = System.nanoTime()
         loadStartFence = modelViewer.engine.createFence()
+        modelLoaded = true
     }
 
     /**
@@ -211,72 +225,24 @@ class ModelView : LinearLayout {
         automation.stopRunning()
     }
 
-    /**
-     * Our frame callback that keeps rendering and checks if the fence has passed.
-     */
-    private inner class FrameCallback : Choreographer.FrameCallback {
-        private val startTime = System.nanoTime()
+    private fun applyPreselectedEntities() {
+        if (pendingPreselectedEntities == null || !modelLoaded) return
 
-        override fun doFrame(frameTimeNanos: Long) {
-            choreographer.postFrameCallback(this)
-
-            // If we have a fence, wait(FLUSH, 0) to see if the GPU has finished loading.
-            loadStartFence?.let { fence ->
-                val status = fence.wait(Mode.FLUSH, 0)
-                if (status == FenceStatus.CONDITION_SATISFIED) {
-                    val endTime = System.nanoTime()
-                    val totalMs = (endTime - loadStartTime) / 1_000_000
-                    Log.i(TAG, "Filament backend took $totalMs ms to load the model.")
-                    modelViewer.engine.destroyFence(fence)
-                    loadStartFence = null
-                }
-            }
-
-            // Animate model if it has animations.
-            modelViewer.animator?.apply {
-                if (animationCount > 0) {
-                    val elapsedTimeSeconds = (frameTimeNanos - startTime) / 1_000_000_000.0
-                    applyAnimation(0, elapsedTimeSeconds.toFloat())
-                    updateBoneMatrices()
-                }
-            }
-
-            // Render the frame.
-            try {
-                modelViewer.render(frameTimeNanos)
-            } catch (e: Exception) {
-                Log.e(TAG, "Rendering exception: $e")
-            }
-        }
-    }
-
-    /**
-     * Single-tap listener to pick an entity on the model.
-     */
-    private inner class SingleTapListener : GestureDetector.SimpleOnGestureListener() {
-        override fun onSingleTapUp(event: MotionEvent): Boolean {
-            val x = event.x.toInt()
-            val y = textureView.height - event.y.toInt()
-
-            modelViewer.view.pick(x, y, mainExecutor) { result ->
-                if (result.renderable == 0) {
-                    Log.v(TAG, "No entity picked at ($x, $y)")
-                    return@pick
-                }
-                val entity = result.renderable
-                Log.v(TAG, "Picked entity ID: $entity")
-
-                if (selectedEntities.contains(entity)) {
-                    resetRenderableColor(entity)
-                    selectedEntities.remove(entity)
-                } else {
-                    setRenderableColor(entity, 1.0f, 0.0f, 0.0f, 1.0f)
+        pendingPreselectedEntities?.forEach { name ->
+            modelViewer.asset?.getEntities()?.forEach { entity ->
+                val entityName = modelViewer.asset?.getName(entity)
+                if (name == entityName && entity !in selectedEntities) {
+                    setRenderableColor(entity, 0.0f, 1.0f, 0.0f, 1.0f) // Green
                     selectedEntities.add(entity)
                 }
-                sendSelectedEntitiesToFlutter()
             }
-            return super.onSingleTapUp(event)
         }
+
+        // Notify Flutter of the initial selection
+        sendSelectedEntitiesToFlutter()
+
+        // Clear pending entities to prevent re-processing
+        pendingPreselectedEntities = null
     }
 
     /**
@@ -323,6 +289,77 @@ class ModelView : LinearLayout {
             } else {
                 Log.w(TAG, "Material has no 'baseColorFactor' parameter.")
             }
+        }
+    }
+
+    /**
+     * Our frame callback that keeps rendering and checks if the fence has passed.
+     */
+    private inner class FrameCallback : Choreographer.FrameCallback {
+        private val startTime = System.nanoTime()
+
+        override fun doFrame(frameTimeNanos: Long) {
+            choreographer.postFrameCallback(this)
+
+            // If we have a fence, wait(FLUSH, 0) to see if the GPU has finished loading.
+            loadStartFence?.let { fence ->
+                val status = fence.wait(Fence.Mode.FLUSH, 0)
+                if (status == Fence.FenceStatus.CONDITION_SATISFIED) {
+                    val endTime = System.nanoTime()
+                    val totalMs = (endTime - loadStartTime) / 1_000_000
+                    Log.i(TAG, "Filament backend took $totalMs ms to load the model.")
+                    modelViewer.engine.destroyFence(fence)
+                    loadStartFence = null
+
+                    // Apply preselected entities now that the model is loaded
+                    applyPreselectedEntities()
+                }
+            }
+
+            // Animate model if it has animations.
+            modelViewer.animator?.apply {
+                if (animationCount > 0) {
+                    val elapsedTimeSeconds = (frameTimeNanos - startTime) / 1_000_000_000.0
+                    applyAnimation(0, elapsedTimeSeconds.toFloat())
+                    updateBoneMatrices()
+                }
+            }
+
+            // Render the frame.
+            try {
+                modelViewer.render(frameTimeNanos)
+            } catch (e: Exception) {
+                Log.e(TAG, "Rendering exception: $e")
+            }
+        }
+    }
+
+    /**
+     * Single-tap listener to pick an entity on the model.
+     */
+    private inner class SingleTapListener : GestureDetector.SimpleOnGestureListener() {
+        override fun onSingleTapUp(event: MotionEvent): Boolean {
+            val x = event.x.toInt()
+            val y = textureView.height - event.y.toInt()
+
+            modelViewer.view.pick(x, y, mainExecutor) { result ->
+                if (result.renderable == 0) {
+                    Log.v(TAG, "No entity picked at ($x, $y)")
+                    return@pick
+                }
+                val entity = result.renderable
+                Log.v(TAG, "Picked entity ID: $entity")
+
+                if (selectedEntities.contains(entity)) {
+                    resetRenderableColor(entity)
+                    selectedEntities.remove(entity)
+                } else {
+                    setRenderableColor(entity, 0.0f, 1.0f, 0.0f, 1.0f) // Green
+                    selectedEntities.add(entity)
+                }
+                sendSelectedEntitiesToFlutter()
+            }
+            return true
         }
     }
 }

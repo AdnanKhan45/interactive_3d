@@ -11,6 +11,7 @@ class Interactive3d extends StatefulWidget {
   final String skyboxPath;
   final List<String> resources;
   final void Function(List<EntityData>)? onSelectionChanged;
+  final List<String>? preselectedEntities;
 
   const Interactive3d({
     super.key,
@@ -19,6 +20,7 @@ class Interactive3d extends StatefulWidget {
     required this.skyboxPath,
     this.onSelectionChanged,
     this.resources = const [],
+    this.preselectedEntities,
   });
 
   @override
@@ -72,7 +74,10 @@ class Interactive3dState extends State<Interactive3d> {
     }
 
     // Load the model.
-    await _platform!.loadModel(widget.modelPath, resources);
+    await _platform!.loadModel(
+        widget.modelPath, resources,
+      preselectedEntities: widget.preselectedEntities,
+    );
 
     // Load environment.
     await _platform!.loadEnvironment(widget.iblPath, widget.skyboxPath);
