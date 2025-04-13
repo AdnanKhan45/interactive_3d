@@ -80,11 +80,12 @@ class Interactive3dPlatformView(
                 val modelName = call.argument<String>("name")
                 val resources = call.argument<Map<String, ByteArray>>("resources") ?: emptyMap()
                 val preselectedEntities = call.argument<List<String>?>("preselectedEntities")
+                val selectionColor = call.argument<List<Double>?>("selectionColor")
 
                 if (modelBytes != null && modelName != null) {
                     val buffer = ByteBuffer.wrap(modelBytes)
                     mainHandler.post {
-                        customView.setModel(buffer, modelName, resources, preselectedEntities)
+                        customView.setModel(buffer, modelName, resources, preselectedEntities, selectionColor)
                         result.success(null)
                     }
                 } else {

@@ -16,6 +16,7 @@ abstract class Interactive3dPlatform extends PlatformInterface {
   /// [resources] is empty for .glb models and populated for .gltf models.
   Future<void> loadModel(String modelPath, Map<String, ByteData> resources, {
     List<String>? preselectedEntities,
+    List<double>? selectionColor,
   });
 
   /// Method to load the environment.

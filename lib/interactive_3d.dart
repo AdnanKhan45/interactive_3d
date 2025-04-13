@@ -12,6 +12,7 @@ class Interactive3d extends StatefulWidget {
   final List<String> resources;
   final void Function(List<EntityData>)? onSelectionChanged;
   final List<String>? preselectedEntities;
+  final List<double>? selectionColor;
 
   const Interactive3d({
     super.key,
@@ -21,6 +22,7 @@ class Interactive3d extends StatefulWidget {
     this.onSelectionChanged,
     this.resources = const [],
     this.preselectedEntities,
+    this.selectionColor,
   });
 
   @override
@@ -77,6 +79,7 @@ class Interactive3dState extends State<Interactive3d> {
     await _platform!.loadModel(
         widget.modelPath, resources,
       preselectedEntities: widget.preselectedEntities,
+      selectionColor: widget.selectionColor,
     );
 
     // Load environment.

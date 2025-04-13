@@ -27,6 +27,7 @@ class GlbLoaderExampleState
                 iblPath: 'assets/models/giuseppe_bridge_4k_ibl.ktx',
                 skyboxPath: 'assets/models/giuseppe_bridge_4k_skybox.ktx',
                 preselectedEntities: ["Teeth_Lower_1", "Teeth_Lower_2", "Teeth_Lower_3", "Neck"],
+                selectionColor: [0.0, 0.0, 1.0, 1.0], // Blue
                 onSelectionChanged: (selectedEntities) {
                   setState(() {
                     _selectedEntities = selectedEntities;

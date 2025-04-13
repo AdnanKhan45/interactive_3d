@@ -1,3 +1,4 @@
+// ModelView.kt
 package com.example.interactive_3d
 
 import android.annotation.SuppressLint
@@ -22,53 +23,28 @@ import com.google.android.filament.utils.ModelViewer
 import java.nio.ByteBuffer
 import java.util.concurrent.Executor
 
-/**
- * A custom view that renders a Filament 3D model using a TextureView.
- * It integrates fence logic to measure how long Filament takes to load the model on the GPU.
- */
 class ModelView : LinearLayout {
 
     private val TAG = "ModelView"
 
-    // Replaces SurfaceView with a TextureView for Filament rendering.
     private lateinit var textureView: TextureView
-
-    // Scheduler for frame callbacks.
     private lateinit var choreographer: Choreographer
     private val frameScheduler = FrameCallback()
-
-    // ModelViewer from Filament utils.
     private lateinit var modelViewer: ModelViewer
-
-    // Automation engine (optional features for glTF).
     private val automation = AutomationEngine()
-
-    // Tracks when model loading started, for fence timing.
     private var loadStartTime = 0L
     private var loadStartFence: Fence? = null
-
-    // Viewer content references for advanced usage.
     private val viewerContent = AutomationEngine.ViewerContent()
-
-    // Tap detection for picking entities.
     private lateinit var singleTapDetector: GestureDetector
     private val singleTapListener = SingleTapListener()
-
-    // Keep track of picked entities.
     private val selectedEntities = mutableSetOf<Int>()
-
-    // For .gltf external resource support.
     private val resourceMap = mutableMapOf<String, ByteBuffer>()
-
-    // Main thread executor for pick callbacks, etc.
     private val mainHandler = Handler(Looper.getMainLooper())
     private val mainExecutor = Executor { command -> mainHandler.post(command) }
-
-    // Track preselected entities to be applied after model load
     private var pendingPreselectedEntities: List<String>? = null
     private var modelLoaded = false
+    private var selectionColor: FloatArray? = null // Store RGBA as [r, g, b, a]
 
-    // Callback interface to report selection changes back to the caller.
     interface SelectionListener {
         fun onSelectionChanged(selectedEntities: List<Map<String, Any>>)
     }
@@ -77,22 +53,18 @@ class ModelView : LinearLayout {
         selectionListener = listener
     }
 
-    //region Constructors
     constructor(context: Context?) : super(context) { init(context) }
     constructor(context: Context?, attrs: AttributeSet?) : super(context, attrs) { init(context) }
     constructor(context: Context?, attrs: AttributeSet?, defStyleAttr: Int) : super(context, attrs, defStyleAttr) { init(context) }
     constructor(context: Context?, attrs: AttributeSet?, defStyleAttr: Int, defStyleRes: Int) : super(context, attrs, defStyleAttr, defStyleRes) { init(context) }
-    //endregion
 
     @SuppressLint("ClickableViewAccessibility")
     private fun init(context: Context?) {
-        // Inflate layout that contains our TextureView (id: main_sv).
         val inflated = LayoutInflater.from(context).inflate(R.layout.custom_view, this, true)
         textureView = inflated.findViewById(R.id.main_sv)
 
         singleTapDetector = GestureDetector(context, singleTapListener)
 
-        // Prepare Filament's ModelViewer using a TextureView.
         choreographer = Choreographer.getInstance()
         modelViewer = ModelViewer(textureView)
         viewerContent.view = modelViewer.view
@@ -101,17 +73,14 @@ class ModelView : LinearLayout {
         viewerContent.scene = modelViewer.scene
         viewerContent.renderer = modelViewer.renderer
 
-        // Capture touches for rotating the model and picking.
         textureView.setOnTouchListener { _, event ->
             modelViewer.onTouchEvent(event)
             singleTapDetector.onTouchEvent(event)
             true
         }
 
-        // Start continuous rendering.
         choreographer.postFrameCallback(frameScheduler)
 
-        // Activity lifecycle handling to pause/resume rendering.
         (context as? Activity)?.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityCreated(activity: Activity, savedInstanceState: android.os.Bundle?) {}
             override fun onActivityStarted(activity: Activity) {}
@@ -131,15 +100,27 @@ class ModelView : LinearLayout {
     }
 
     /**
-     * Load a 3D model (GLB or GLTF) with optional preselected entities.
+     * Load a 3D model (GLB or GLTF) with optional preselected entities and selection color.
      */
     fun setModel(
         buffer: ByteBuffer,
         fileName: String,
         resources: Map<String, ByteArray>,
-        preselectedEntities: List<String>?
+        preselectedEntities: List<String>?,
+        selectionColor: List<Double>?
     ) {
         this.pendingPreselectedEntities = preselectedEntities
+        // Convert selectionColor to FloatArray or use default green
+        this.selectionColor = if (selectionColor?.size == 4) {
+            floatArrayOf(
+                selectionColor[0].toFloat(),
+                selectionColor[1].toFloat(),
+                selectionColor[2].toFloat(),
+                selectionColor[3].toFloat()
+            )
+        } else {
+            floatArrayOf(0.0f, 1.0f, 0.0f, 1.0f) // Default green
+        }
         setModel(buffer, fileName, resources)
     }
 
@@ -168,22 +149,17 @@ class ModelView : LinearLayout {
             return
         }
 
-        // Transform model to fit the view if auto-scale is enabled.
         if (automation.viewerOptions.autoScaleEnabled) {
             modelViewer.transformToUnitCube()
         } else {
             modelViewer.clearRootTransform()
         }
 
-        // Start timing the backend load with a fence.
         loadStartTime = System.nanoTime()
         loadStartFence = modelViewer.engine.createFence()
         modelLoaded = true
     }
 
-    /**
-     * Load skybox and IBL from KTX buffers.
-     */
     fun setLights(skyBox: ByteBuffer, indirectLight: ByteBuffer) {
         val engine = modelViewer.engine
         val scene = modelViewer.scene
@@ -193,9 +169,6 @@ class ModelView : LinearLayout {
         scene.skybox = KTX1Loader.createSkybox(engine, skyBox)
     }
 
-    /**
-     * Configure post-processing and rendering quality.
-     */
     fun setViewOptions() {
         val view = modelViewer.view
         view.renderQuality = view.renderQuality.apply {
@@ -217,9 +190,6 @@ class ModelView : LinearLayout {
         }
     }
 
-    /**
-     * An optional cleanup method if you want to destroy the model from outside.
-     */
     fun destroy() {
         modelViewer.destroyModel()
         automation.stopRunning()
@@ -232,22 +202,17 @@ class ModelView : LinearLayout {
             modelViewer.asset?.getEntities()?.forEach { entity ->
                 val entityName = modelViewer.asset?.getName(entity)
                 if (name == entityName && entity !in selectedEntities) {
-                    setRenderableColor(entity, 0.0f, 1.0f, 0.0f, 1.0f) // Green
+                    val color = selectionColor ?: floatArrayOf(0.0f, 1.0f, 0.0f, 1.0f)
+                    setRenderableColor(entity, color[0], color[1], color[2], color[3])
                     selectedEntities.add(entity)
                 }
             }
         }
 
-        // Notify Flutter of the initial selection
         sendSelectedEntitiesToFlutter()
-
-        // Clear pending entities to prevent re-processing
         pendingPreselectedEntities = null
     }
 
-    /**
-     * Notify Flutter about current selections.
-     */
     private fun sendSelectedEntitiesToFlutter() {
         val asset = modelViewer.asset ?: return
         val items = mutableListOf<Map<String, Any>>()
@@ -292,16 +257,12 @@ class ModelView : LinearLayout {
         }
     }
 
-    /**
-     * Our frame callback that keeps rendering and checks if the fence has passed.
-     */
     private inner class FrameCallback : Choreographer.FrameCallback {
         private val startTime = System.nanoTime()
 
         override fun doFrame(frameTimeNanos: Long) {
             choreographer.postFrameCallback(this)
 
-            // If we have a fence, wait(FLUSH, 0) to see if the GPU has finished loading.
             loadStartFence?.let { fence ->
                 val status = fence.wait(Fence.Mode.FLUSH, 0)
                 if (status == Fence.FenceStatus.CONDITION_SATISFIED) {
@@ -311,12 +272,10 @@ class ModelView : LinearLayout {
                     modelViewer.engine.destroyFence(fence)
                     loadStartFence = null
 
-                    // Apply preselected entities now that the model is loaded
                     applyPreselectedEntities()
                 }
             }
 
-            // Animate model if it has animations.
             modelViewer.animator?.apply {
                 if (animationCount > 0) {
                     val elapsedTimeSeconds = (frameTimeNanos - startTime) / 1_000_000_000.0
@@ -325,7 +284,6 @@ class ModelView : LinearLayout {
                 }
             }
 
-            // Render the frame.
             try {
                 modelViewer.render(frameTimeNanos)
             } catch (e: Exception) {
@@ -334,9 +292,6 @@ class ModelView : LinearLayout {
         }
     }
 
-    /**
-     * Single-tap listener to pick an entity on the model.
-     */
     private inner class SingleTapListener : GestureDetector.SimpleOnGestureListener() {
         override fun onSingleTapUp(event: MotionEvent): Boolean {
             val x = event.x.toInt()
@@ -354,7 +309,8 @@ class ModelView : LinearLayout {
                     resetRenderableColor(entity)
                     selectedEntities.remove(entity)
                 } else {
-                    setRenderableColor(entity, 0.0f, 1.0f, 0.0f, 1.0f) // Green
+                    val color = selectionColor ?: floatArrayOf(0.0f, 1.0f, 0.0f, 1.0f)
+                    setRenderableColor(entity, color[0], color[1], color[2], color[3])
                     selectedEntities.add(entity)
                 }
                 sendSelectedEntitiesToFlutter()

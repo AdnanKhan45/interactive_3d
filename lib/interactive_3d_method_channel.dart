@@ -37,12 +37,12 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
       String modelPath,
       Map<String, ByteData> resources, {
         List<String>? preselectedEntities,
+        List<double>? selectionColor,
       }) async {
     // Convert the main model to bytes.
     ByteData modelData = await rootBundle.load(modelPath);
     Uint8List modelBytes = modelData.buffer.asUint8List();
 
-    // Convert the resources map to a sendable form.
     final resourceMap = resources.map(
           (key, value) => MapEntry(key, value.buffer.asUint8List()),
     );
@@ -52,6 +52,7 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
       'name': modelPath.split('/').last,
       'resources': resourceMap,
       'preselectedEntities': preselectedEntities,
+      'selectionColor': selectionColor,
     };
 
     await _methodChannel.invokeMethod('loadModel', args);
