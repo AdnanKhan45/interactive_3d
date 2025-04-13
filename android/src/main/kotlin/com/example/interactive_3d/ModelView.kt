@@ -24,15 +24,21 @@ import com.google.android.filament.Camera
 import java.nio.ByteBuffer
 import java.util.concurrent.Executor
 
+/**
+ * A custom view for rendering and interacting with 3D models using Filament.
+ */
 class ModelView : LinearLayout {
 
     private val TAG = "ModelView"
 
+    // UI components
     private lateinit var textureView: TextureView
     private lateinit var choreographer: Choreographer
     private val frameScheduler = FrameCallback()
     private lateinit var modelViewer: ModelViewer
     private val automation = AutomationEngine()
+
+    // State variables
     private var loadStartTime = 0L
     private var loadStartFence: Fence? = null
     private val viewerContent = AutomationEngine.ViewerContent()
@@ -46,19 +52,33 @@ class ModelView : LinearLayout {
     private var modelLoaded = false
     private var selectionColor: FloatArray? = null // Store RGBA as [r, g, b, a]
 
+    /**
+     * Listener interface for selection changes in the 3D model.
+     */
     interface SelectionListener {
         fun onSelectionChanged(selectedEntities: List<Map<String, Any>>)
     }
+
     private var selectionListener: SelectionListener? = null
+
+    /**
+     * Sets the selection listener for the view.
+     * @param listener The listener to be notified of selection changes.
+     */
     fun setSelectionListener(listener: SelectionListener) {
         selectionListener = listener
     }
 
+    // Constructors
     constructor(context: Context?) : super(context) { init(context) }
     constructor(context: Context?, attrs: AttributeSet?) : super(context, attrs) { init(context) }
     constructor(context: Context?, attrs: AttributeSet?, defStyleAttr: Int) : super(context, attrs, defStyleAttr) { init(context) }
     constructor(context: Context?, attrs: AttributeSet?, defStyleAttr: Int, defStyleRes: Int) : super(context, attrs, defStyleAttr, defStyleRes) { init(context) }
 
+    /**
+     * Initializes the view and its components.
+     * @param context The context in which the view is running.
+     */
     @SuppressLint("ClickableViewAccessibility")
     private fun init(context: Context?) {
         val inflated = LayoutInflater.from(context).inflate(R.layout.custom_view, this, true)
@@ -97,36 +117,25 @@ class ModelView : LinearLayout {
                 choreographer.removeFrameCallback(frameScheduler)
                 modelViewer.destroyModel()
             }
-
-
         })
     }
 
+    /**
+     * Sets the zoom level for the camera.
+     * @param zoom The zoom level to set.
+     */
     fun setCameraZoomLevel(zoom: Float) {
-        // Ensure the textureView dimensions are available.
         val width = textureView.width.takeIf { it != 0 } ?: return
         val height = textureView.height.takeIf { it != 0 } ?: return
-
-        if (textureView.width == 0 || textureView.height == 0) {
-            Log.w(TAG, "Cannot set zoom: textureView dimensions are zero.")
-            return
-        }
-
 
         val camera = modelViewer.camera
         val aspect = width.toDouble() / height.toDouble()
         val near = 0.1
         val far = 100.0
 
-        // Define a default vertical field-of-view (in degrees)
         val defaultFov = 50.0
-        // Adjust the FOV based on the zoom factor:
-        // Zoom = 1 returns the default FOV,
-        // Zoom > 1 returns a smaller FOV (zoom in),
-        // Zoom < 1 returns a larger FOV (zoom out)
         val newFov = defaultFov / zoom
 
-        // Use the newFov, aspect, near, far, and FOV direction.
         camera.setProjection(
             newFov,
             aspect,
@@ -139,7 +148,7 @@ class ModelView : LinearLayout {
     }
 
     /**
-     * Load a 3D model (GLB or GLTF) with optional preselected entities and selection color.
+     * Loads a 3D model (GLB or GLTF) with optional preselected entities and selection color.
      */
     fun setModel(
         buffer: ByteBuffer,
@@ -149,7 +158,6 @@ class ModelView : LinearLayout {
         selectionColor: List<Double>?
     ) {
         this.pendingPreselectedEntities = preselectedEntities
-        // Convert selectionColor to FloatArray or use default green
         this.selectionColor = if (selectionColor?.size == 4) {
             floatArrayOf(
                 selectionColor[0].toFloat(),
@@ -164,7 +172,7 @@ class ModelView : LinearLayout {
     }
 
     /**
-     * Load a 3D model (GLB or GLTF).
+     * Loads a 3D model (GLB or GLTF).
      */
     private fun setModel(buffer: ByteBuffer, fileName: String, resources: Map<String, ByteArray>) {
         modelLoaded = false
@@ -199,6 +207,11 @@ class ModelView : LinearLayout {
         modelLoaded = true
     }
 
+    /**
+     * Sets the lighting for the 3D scene.
+     * @param skyBox The skybox data.
+     * @param indirectLight The indirect light data.
+     */
     fun setLights(skyBox: ByteBuffer, indirectLight: ByteBuffer) {
         val engine = modelViewer.engine
         val scene = modelViewer.scene
@@ -208,6 +221,9 @@ class ModelView : LinearLayout {
         scene.skybox = KTX1Loader.createSkybox(engine, skyBox)
     }
 
+    /**
+     * Configures the view options for rendering.
+     */
     fun setViewOptions() {
         val view = modelViewer.view
         view.renderQuality = view.renderQuality.apply {
@@ -229,6 +245,9 @@ class ModelView : LinearLayout {
         }
     }
 
+    /**
+     * Destroys the 3D model and stops automation.
+     */
     fun destroy() {
         modelViewer.destroyModel()
         automation.stopRunning()
