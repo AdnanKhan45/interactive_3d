@@ -1,0 +1,78 @@
+PODS:
+  - Filament (1.56.6):
+    - Filament/camutils (= 1.56.6)
+    - Filament/filamat (= 1.56.6)
+    - Filament/filament (= 1.56.6)
+    - Filament/filameshio (= 1.56.6)
+    - Filament/gltfio_core (= 1.56.6)
+    - Filament/image (= 1.56.6)
+    - Filament/ktxreader (= 1.56.6)
+    - Filament/math (= 1.56.6)
+    - Filament/tsl (= 1.56.6)
+    - Filament/uberz (= 1.56.6)
+    - Filament/utils (= 1.56.6)
+    - Filament/viewer (= 1.56.6)
+  - Filament/camutils (1.56.6):
+    - Filament/math
+  - Filament/filamat (1.56.6):
+    - Filament/math
+    - Filament/utils
+  - Filament/filament (1.56.6):
+    - Filament/math
+    - Filament/utils
+  - Filament/filameshio (1.56.6):
+    - Filament/filament
+  - Filament/gltfio_core (1.56.6):
+    - Filament/filament
+    - Filament/ktxreader
+    - Filament/uberz
+  - Filament/image (1.56.6):
+    - Filament/filament
+  - Filament/ktxreader (1.56.6):
+    - Filament/filament
+    - Filament/image
+  - Filament/math (1.56.6)
+  - Filament/tsl (1.56.6)
+  - Filament/uberz (1.56.6):
+    - Filament/filamat
+    - Filament/tsl
+    - Filament/utils
+  - Filament/utils (1.56.6):
+    - Filament/tsl
+  - Filament/viewer (1.56.6):
+    - Filament/filament
+    - Filament/gltfio_core
+  - Flutter (1.0.0)
+  - integration_test (0.0.1):
+    - Flutter
+  - interactive_3d (0.0.2):
+    - Filament
+    - Flutter
+
+DEPENDENCIES:
+  - Filament
+  - Flutter (from `Flutter`)
+  - integration_test (from `.symlinks/plugins/integration_test/ios`)
+  - interactive_3d (from `.symlinks/plugins/interactive_3d/ios`)
+
+SPEC REPOS:
+  trunk:
+    - Filament
+
+EXTERNAL SOURCES:
+  Flutter:
+    :path: Flutter
+  integration_test:
+    :path: ".symlinks/plugins/integration_test/ios"
+  interactive_3d:
+    :path: ".symlinks/plugins/interactive_3d/ios"
+
+SPEC CHECKSUMS:
+  Filament: f1f5cbe63c41a62882aeda3d594beed5b2c86fcd
+  Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
+  integration_test: 252f60fa39af5e17c3aa9899d35d908a0721b573
+  interactive_3d: 74bc8074f939f1e95b2ee62fe69906749c15b3b0
+
+PODFILE CHECKSUM: 9533ac0979267b80e69e1a73396991ee61c48079
+
+COCOAPODS: 1.16.2

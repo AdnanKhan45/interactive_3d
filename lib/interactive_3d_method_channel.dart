@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:typed_data';
-import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
-import 'package:interactive_3d/interactive_3d_platform_interface.dart';
+import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+import 'interactive_3d_platform_interface.dart';
 import 'interactive_3d.dart';
 
 class MethodChannelInteractive3d extends Interactive3dPlatform {
@@ -34,47 +35,100 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
   }
 
   @override
-  Future<void> loadModel(String modelPath, Map<String, ByteData> resources) async {
-    // Convert the main model to bytes.
-    ByteData modelData = await rootBundle.load(modelPath);
-    Uint8List modelBytes = modelData.buffer.asUint8List();
+  Future<void> loadModel({
+    String? modelPath,
+    String? modelUrl,
+    required Map<String, ByteData> resources,
+    List<String>? preselectedEntities,
+    List<double>? selectionColor,
+  }) async {
+    Uint8List modelBytes;
+    String modelName;
 
-    // Convert the resources map to a sendable form.
+    if (modelPath != null) {
+      ByteData modelData = await rootBundle.load(modelPath);
+      modelBytes = modelData.buffer.asUint8List();
+      modelName = modelPath.split('/').last;
+    } else if (modelUrl != null) {
+      final response = await http.get(Uri.parse(modelUrl));
+      if (response.statusCode != 200) {
+        throw Exception('Failed to load model: $modelUrl, status: ${response.statusCode}');
+      }
+      modelBytes = response.bodyBytes;
+      modelName = modelUrl.split('/').last;
+    } else {
+      throw ArgumentError('Must provide either modelPath or modelUrl');
+    }
+
     final resourceMap = resources.map(
           (key, value) => MapEntry(key, value.buffer.asUint8List()),
     );
 
     final args = {
       'modelBytes': modelBytes,
-      'name': modelPath.split('/').last,
-      'resources': resourceMap
+      'name': modelName,
+      'resources': resourceMap,
+      'preselectedEntities': preselectedEntities,
+      'selectionColor': selectionColor,
     };
 
     await _methodChannel.invokeMethod('loadModel', args);
   }
 
   @override
-  Future<void> loadEnvironment(String iblPath, String skyboxPath) async {
+  Future<void> loadEnvironment({
+    String? iblPath,
+    String? iblUrl,
+    String? skyboxPath,
+    String? skyboxUrl,
+  }) async {
     Uint8List? iblBytes;
     Uint8List? skyboxBytes;
 
     try {
-      ByteData iblData = await rootBundle.load(iblPath);
-      iblBytes = iblData.buffer.asUint8List();
+      if (iblPath != null) {
+        ByteData iblData = await rootBundle.load(iblPath);
+        iblBytes = iblData.buffer.asUint8List();
+      } else if (iblUrl != null) {
+        final response = await http.get(Uri.parse(iblUrl));
+        if (response.statusCode == 200) {
+          iblBytes = response.bodyBytes;
+        } else {
+          debugPrint('Failed to load IBL from $iblUrl: ${response.statusCode}');
+        }
+      }
     } catch (e) {
-      debugPrint('Error loading IBL file: $e');
+      debugPrint('Error loading IBL: $e');
     }
 
     try {
-      ByteData skyboxData = await rootBundle.load(skyboxPath);
-      skyboxBytes = skyboxData.buffer.asUint8List();
+      if (skyboxPath != null) {
+        ByteData skyboxData = await rootBundle.load(skyboxPath);
+        skyboxBytes = skyboxData.buffer.asUint8List();
+      } else if (skyboxUrl != null) {
+        final response = await http.get(Uri.parse(skyboxUrl));
+        if (response.statusCode == 200) {
+          skyboxBytes = response.bodyBytes;
+        } else {
+          debugPrint('Failed to load skybox from $skyboxUrl: ${response.statusCode}');
+        }
+      }
     } catch (e) {
-      debugPrint('Error loading skybox file: $e');
+      debugPrint('Error loading skybox: $e');
+    }
+
+    if (iblBytes == null || skyboxBytes == null) {
+      throw Exception('Failed to load environment: iblBytes or skyboxBytes is null');
     }
 
     await _methodChannel.invokeMethod('loadEnvironment', {
       'iblBytes': iblBytes,
       'skyboxBytes': skyboxBytes,
     });
+  }
+
+  @override
+  Future<void> setCameraZoomLevel(double zoom) async {
+    await _methodChannel.invokeMethod('setZoomLevel', {'zoom': zoom});
   }
 }

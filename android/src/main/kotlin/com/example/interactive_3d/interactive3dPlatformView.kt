@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.MutableContextWrapper
 import android.os.Handler
 import android.os.Looper
+import com.google.android.filament.utils.Utils
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
@@ -12,7 +13,6 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.platform.PlatformView
 import java.nio.ByteBuffer
 import java.util.concurrent.Executor
-import com.google.android.filament.utils.Utils
 
 class Interactive3dPlatformView(
     private val context: Context,
@@ -79,11 +79,13 @@ class Interactive3dPlatformView(
                 val modelBytes = call.argument<ByteArray>("modelBytes")
                 val modelName = call.argument<String>("name")
                 val resources = call.argument<Map<String, ByteArray>>("resources") ?: emptyMap()
+                val preselectedEntities = call.argument<List<String>?>("preselectedEntities")
+                val selectionColor = call.argument<List<Double>?>("selectionColor")
 
                 if (modelBytes != null && modelName != null) {
                     val buffer = ByteBuffer.wrap(modelBytes)
                     mainHandler.post {
-                        customView.setModel(buffer, modelName, resources)
+                        customView.setModel(buffer, modelName, resources, preselectedEntities, selectionColor)
                         result.success(null)
                     }
                 } else {
@@ -104,6 +106,17 @@ class Interactive3dPlatformView(
                     }
                 } else {
                     result.error("INVALID_ARGUMENT", "Environment bytes are null", null)
+                }
+            }
+            "setZoomLevel" -> {
+                val zoom = call.argument<Double>("zoom")?.toFloat()
+                if (zoom != null) {
+                    mainHandler.post {
+                        customView.setCameraZoomLevel(zoom)
+                        result.success(null)
+                    }
+                } else {
+                    result.error("INVALID_ARGUMENT", "Zoom value is null", null)
                 }
             }
 

@@ -1,3 +1,12 @@
+## 1.0.1
+
+* 3nd release of `interactive_3d`.
+- Features:
+  - Preselection based on entity names.
+  - Dynamic selected color.
+  - Set Default Zoom.
+  - Load model and background environments from network URLs.
+
 ## 0.0.2
 
 * 2nd release of `interactive_3d`.

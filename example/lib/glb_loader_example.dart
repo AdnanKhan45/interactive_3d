@@ -4,12 +4,14 @@ import 'package:interactive_3d/interactive_3d.dart';
 import 'result_page.dart';
 
 class GlbLoaderExample extends StatefulWidget {
+  const GlbLoaderExample({super.key});
+
   @override
-  _GlbLoaderExampleState createState() =>
-      _GlbLoaderExampleState();
+  GlbLoaderExampleState createState() =>
+      GlbLoaderExampleState();
 }
 
-class _GlbLoaderExampleState
+class GlbLoaderExampleState
     extends State<GlbLoaderExample> {
   List<EntityData> _selectedEntities = [];
 
@@ -24,6 +26,9 @@ class _GlbLoaderExampleState
                 modelPath: 'assets/models/Tooth-3.glb',
                 iblPath: 'assets/models/giuseppe_bridge_4k_ibl.ktx',
                 skyboxPath: 'assets/models/giuseppe_bridge_4k_skybox.ktx',
+                preselectedEntities: ["Teeth_Lower_1", "Teeth_Lower_2", "Teeth_Lower_3", "Neck"],
+                selectionColor: [1.0, 0.0, 0.0, 1.0], // Red color
+                defaultZoom: 1.5,
                 onSelectionChanged: (selectedEntities) {
                   setState(() {
                     _selectedEntities = selectedEntities;

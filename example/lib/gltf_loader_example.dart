@@ -4,12 +4,14 @@ import 'package:interactive_3d/interactive_3d.dart';
 import 'result_page.dart';
 
 class GltfLoaderExample extends StatefulWidget {
+  const GltfLoaderExample({super.key});
+
   @override
-  _GltfLoaderExampleState createState() =>
-      _GltfLoaderExampleState();
+  GltfLoaderExampleState createState() =>
+      GltfLoaderExampleState();
 }
 
-class _GltfLoaderExampleState
+class GltfLoaderExampleState
     extends State<GltfLoaderExample> {
   List<EntityData> _selectedEntities = [];
 
