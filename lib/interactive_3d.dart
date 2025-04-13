@@ -1,19 +1,30 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'interactive_3d_method_channel.dart';
 import 'interactive_3d_platform_interface.dart';
-import 'dart:io';
 
+/// A widget for rendering and interacting with 3D models using a native platform view.
 class Interactive3d extends StatefulWidget {
-  /// Path to the 3D model file (e.g., `.glb` or `.gltf`) to be loaded.
-  final String modelPath;
+  /// Path to the 3D model file (e.g., `.glb` or `.gltf`) to be loaded from assets.
+  final String? modelPath;
 
-  /// Path to the Image-Based Lighting (IBL) file used for rendering the 3D model.
-  final String iblPath;
+  /// URL to the 3D model file (e.g., `.glb` or `.gltf`) to be loaded from the network.
+  final String? modelUrl;
 
-  /// Path to the skybox texture file used for the 3D environment.
-  final String skyboxPath;
+  /// Path to the Image-Based Lighting (IBL) file used for rendering the 3D model from assets.
+  final String? iblPath;
+
+  /// URL to the Image-Based Lighting (IBL) file used for rendering the 3D model from the network.
+  final String? iblUrl;
+
+  /// Path to the skybox texture file used for the 3D environment from assets.
+  final String? skyboxPath;
+
+  /// URL to the skybox texture file used for the 3D environment from the network.
+  final String? skyboxUrl;
 
   /// A list of additional resource file paths required for `.gltf` models (e.g., textures, binary files).
   /// Defaults to an empty list.
@@ -35,9 +46,12 @@ class Interactive3d extends StatefulWidget {
   /// Constructor for the `Interactive3d` widget.
   const Interactive3d({
     super.key,
-    required this.modelPath,
-    required this.iblPath,
-    required this.skyboxPath,
+    this.modelPath,
+    this.modelUrl,
+    this.iblPath,
+    this.iblUrl,
+    this.skyboxPath,
+    this.skyboxUrl,
     this.onSelectionChanged,
     this.resources = const [],
     this.preselectedEntities,
@@ -83,8 +97,11 @@ class Interactive3dState extends State<Interactive3d> {
   dynamic _creationParams() {
     return {
       'modelPath': widget.modelPath,
+      'modelUrl': widget.modelUrl,
       'iblPath': widget.iblPath,
+      'iblUrl': widget.iblUrl,
       'skyboxPath': widget.skyboxPath,
+      'skyboxUrl': widget.skyboxUrl,
       'resources': widget.resources,
     };
   }
@@ -101,20 +118,26 @@ class Interactive3dState extends State<Interactive3d> {
 
     // Create resources if needed (for .gltf only).
     Map<String, ByteData> resources = {};
-    if (widget.modelPath.endsWith('.gltf')) {
-      resources = await _loadGltfResources(widget.modelPath);
+    if ((widget.modelPath ?? widget.modelUrl ?? '').endsWith('.gltf')) {
+      resources = await _loadGltfResources();
     }
 
     // Load the model.
     await _platform!.loadModel(
-      widget.modelPath,
-      resources,
+      modelPath: widget.modelPath,
+      modelUrl: widget.modelUrl,
+      resources: resources,
       preselectedEntities: widget.preselectedEntities,
       selectionColor: widget.selectionColor,
     );
 
     // Load environment.
-    await _platform!.loadEnvironment(widget.iblPath, widget.skyboxPath);
+    await _platform!.loadEnvironment(
+      iblPath: widget.iblPath,
+      iblUrl: widget.iblUrl,
+      skyboxPath: widget.skyboxPath,
+      skyboxUrl: widget.skyboxUrl,
+    );
 
     // Set the default zoom level if provided.
     if (widget.defaultZoom != null) {
@@ -124,29 +147,58 @@ class Interactive3dState extends State<Interactive3d> {
 
   /// Loads additional resources required for `.gltf` models.
   /// Returns a map of resource file names to their byte data.
-  Future<Map<String, ByteData>> _loadGltfResources(String modelPath) async {
+  Future<Map<String, ByteData>> _loadGltfResources() async {
     Map<String, ByteData> resources = {};
 
-    // Identify the base directory.
-    String baseDir = modelPath.substring(0, modelPath.lastIndexOf('/') + 1);
+    // Identify the base directory for assets or assume same directory for URLs.
+    String baseDir = '';
+    if (widget.modelPath != null) {
+      baseDir = widget.modelPath!.substring(0, widget.modelPath!.lastIndexOf('/') + 1);
+    } else if (widget.modelUrl != null) {
+      baseDir = widget.modelUrl!.substring(0, widget.modelUrl!.lastIndexOf('/') + 1);
+    }
+
     List<String> candidates = widget.resources;
 
     for (final file in candidates) {
-      final path = '$baseDir$file';
       try {
-        ByteData data = await rootBundle.load(path);
-        resources[file] = data;
+        if (widget.modelPath != null) {
+          final path = '$baseDir$file';
+          ByteData data = await rootBundle.load(path);
+          resources[file] = data;
+        } else if (widget.modelUrl != null) {
+          // For network resources, assume URLs are provided in resources list
+          final uri = Uri.parse('$baseDir$file');
+          ByteData data = await _loadNetworkResource(uri.toString());
+          resources[file] = data;
+        }
       } catch (e) {
-        debugPrint('Optional resource not found: $path');
+        debugPrint('Optional resource not found: $file, error: $e');
       }
     }
 
     return resources;
   }
 
+  /// Loads a resource from a network URL.
+  Future<ByteData> _loadNetworkResource(String url) async {
+    final response = await http.get(Uri.parse(url));
+    if (response.statusCode == 200) {
+      return ByteData.view(response.bodyBytes.buffer);
+    } else {
+      throw Exception('Failed to load resource: $url, status: ${response.statusCode}');
+    }
+  }
+
   /// Handles selection changes and triggers the callback.
   void _onSelectionChanged(List<EntityData> selectedEntities) {
     widget.onSelectionChanged?.call(selectedEntities);
+  }
+
+  @override
+  void dispose() {
+    _selectionSubscription?.cancel();
+    super.dispose();
   }
 }
 

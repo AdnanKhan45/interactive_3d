@@ -1,4 +1,3 @@
-// ModelView.kt
 package com.example.interactive_3d
 
 import android.annotation.SuppressLint
@@ -219,6 +218,7 @@ class ModelView : LinearLayout {
         scene.indirectLight?.intensity = 30_000.0f
         viewerContent.indirectLight = scene.indirectLight
         scene.skybox = KTX1Loader.createSkybox(engine, skyBox)
+        Log.d(TAG, "Environment set: skybox and indirect light loaded")
     }
 
     /**
@@ -243,6 +243,7 @@ class ModelView : LinearLayout {
         view.bloomOptions = view.bloomOptions.apply {
             enabled = true
         }
+        Log.d(TAG, "View options set")
     }
 
     /**
@@ -251,6 +252,7 @@ class ModelView : LinearLayout {
     fun destroy() {
         modelViewer.destroyModel()
         automation.stopRunning()
+        Log.d(TAG, "ModelView destroyed")
     }
 
     private fun applyPreselectedEntities() {

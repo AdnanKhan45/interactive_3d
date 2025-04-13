@@ -12,15 +12,23 @@ abstract class Interactive3dPlatform extends PlatformInterface {
     PlatformInterface.verifyToken(instance, _token);
   }
 
-  /// Method to load the model.
+  /// Method to load the model from assets or network.
   /// [resources] is empty for .glb models and populated for .gltf models.
-  Future<void> loadModel(String modelPath, Map<String, ByteData> resources, {
+  Future<void> loadModel({
+    String? modelPath,
+    String? modelUrl,
+    required Map<String, ByteData> resources,
     List<String>? preselectedEntities,
     List<double>? selectionColor,
   });
 
-  /// Method to load the environment.
-  Future<void> loadEnvironment(String iblPath, String skyboxPath);
+  /// Method to load the environment from assets or network URLs.
+  Future<void> loadEnvironment({
+    String? iblPath,
+    String? iblUrl,
+    String? skyboxPath,
+    String? skyboxUrl,
+  });
 
   /// Method to set the camera position.
   Future<void> setCameraZoomLevel(double zoom);
