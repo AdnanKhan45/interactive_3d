@@ -13,6 +13,7 @@ class Interactive3d extends StatefulWidget {
   final void Function(List<EntityData>)? onSelectionChanged;
   final List<String>? preselectedEntities;
   final List<double>? selectionColor;
+  final double? defaultZoom;
 
   const Interactive3d({
     super.key,
@@ -23,6 +24,7 @@ class Interactive3d extends StatefulWidget {
     this.resources = const [],
     this.preselectedEntities,
     this.selectionColor,
+    this.defaultZoom,
   });
 
   @override
@@ -77,13 +79,18 @@ class Interactive3dState extends State<Interactive3d> {
 
     // Load the model.
     await _platform!.loadModel(
-        widget.modelPath, resources,
+      widget.modelPath, resources,
       preselectedEntities: widget.preselectedEntities,
       selectionColor: widget.selectionColor,
     );
 
     // Load environment.
     await _platform!.loadEnvironment(widget.iblPath, widget.skyboxPath);
+
+    // Set the default zoom level if provided.
+    if (widget.defaultZoom != null) {
+      await _platform!.setCameraZoomLevel(widget.defaultZoom!);
+    }
   }
 
   Future<Map<String, ByteData>> _loadGltfResources(String modelPath) async {

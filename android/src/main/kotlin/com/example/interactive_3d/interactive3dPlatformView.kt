@@ -108,6 +108,17 @@ class Interactive3dPlatformView(
                     result.error("INVALID_ARGUMENT", "Environment bytes are null", null)
                 }
             }
+            "setZoomLevel" -> {
+                val zoom = call.argument<Double>("zoom")?.toFloat()
+                if (zoom != null) {
+                    mainHandler.post {
+                        customView.setCameraZoomLevel(zoom)
+                        result.success(null)
+                    }
+                } else {
+                    result.error("INVALID_ARGUMENT", "Zoom value is null", null)
+                }
+            }
 
             else -> result.notImplemented()
         }

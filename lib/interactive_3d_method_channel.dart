@@ -82,4 +82,9 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
       'skyboxBytes': skyboxBytes,
     });
   }
+
+  @override
+  Future<void> setCameraZoomLevel(double zoom) async {
+    await _methodChannel.invokeMethod('setZoomLevel', {'zoom': zoom});
+  }
 }

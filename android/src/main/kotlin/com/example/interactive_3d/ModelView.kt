@@ -20,6 +20,7 @@ import com.google.android.filament.View
 import com.google.android.filament.utils.AutomationEngine
 import com.google.android.filament.utils.KTX1Loader
 import com.google.android.filament.utils.ModelViewer
+import com.google.android.filament.Camera
 import java.nio.ByteBuffer
 import java.util.concurrent.Executor
 
@@ -96,7 +97,45 @@ class ModelView : LinearLayout {
                 choreographer.removeFrameCallback(frameScheduler)
                 modelViewer.destroyModel()
             }
+
+
         })
+    }
+
+    fun setCameraZoomLevel(zoom: Float) {
+        // Ensure the textureView dimensions are available.
+        val width = textureView.width.takeIf { it != 0 } ?: return
+        val height = textureView.height.takeIf { it != 0 } ?: return
+
+        if (textureView.width == 0 || textureView.height == 0) {
+            Log.w(TAG, "Cannot set zoom: textureView dimensions are zero.")
+            return
+        }
+
+
+        val camera = modelViewer.camera
+        val aspect = width.toDouble() / height.toDouble()
+        val near = 0.1
+        val far = 100.0
+
+        // Define a default vertical field-of-view (in degrees)
+        val defaultFov = 50.0
+        // Adjust the FOV based on the zoom factor:
+        // Zoom = 1 returns the default FOV,
+        // Zoom > 1 returns a smaller FOV (zoom in),
+        // Zoom < 1 returns a larger FOV (zoom out)
+        val newFov = defaultFov / zoom
+
+        // Use the newFov, aspect, near, far, and FOV direction.
+        camera.setProjection(
+            newFov,
+            aspect,
+            near,
+            far,
+            Camera.Fov.VERTICAL
+        )
+
+        Log.d(TAG, "Camera zoom set: zoom = $zoom, newFov = $newFov")
     }
 
     /**
@@ -127,7 +166,7 @@ class ModelView : LinearLayout {
     /**
      * Load a 3D model (GLB or GLTF).
      */
-    fun setModel(buffer: ByteBuffer, fileName: String, resources: Map<String, ByteArray>) {
+    private fun setModel(buffer: ByteBuffer, fileName: String, resources: Map<String, ByteArray>) {
         modelLoaded = false
         resources.forEach { (key, value) ->
             resourceMap[key] = ByteBuffer.wrap(value)

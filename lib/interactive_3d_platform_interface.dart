@@ -22,6 +22,9 @@ abstract class Interactive3dPlatform extends PlatformInterface {
   /// Method to load the environment.
   Future<void> loadEnvironment(String iblPath, String skyboxPath);
 
+  /// Method to set the camera position.
+  Future<void> setCameraZoomLevel(double zoom);
+
   /// Stream to receive selection changes.
   Stream<List<EntityData>> get selectionStream;
 }
