@@ -64,6 +64,13 @@ Interactive3d(
                 // ibl and skybox are background envs
                 iblPath: 'assets/models/venetian_crossroads_2k_ibl.ktx',
                 skyboxPath: 'assets/models/venetian_crossroads_2k_skybox.ktx',
+                // Preselection based on entity names
+                preselectedEntities: ["Teeth_1", "Teeth_2", "Lower_Jaw"],
+                // Dynamic selected color (RGBA) default is Green
+                selectionColor: [1.0, 0.0, 0.0, 1.0], // Red color,
+                // Set default zoom
+                defaultZoom: 1.5, // default 1.0
+                preselectedEntities: ["Teeth_1", "Teeth_2", "Lower_Jaw"],
                 resources: [
                   'scene.bin',
                   'textures/mouth_baseColor.png',
@@ -89,6 +96,34 @@ Interactive3d(
                 // ibl and skybox are background envs
                 iblPath: 'assets/models/venetian_crossroads_2k_ibl.ktx',
                 skyboxPath: 'assets/models/venetian_crossroads_2k_skybox.ktx',
+                // Preselection based on entity names
+                preselectedEntities: ["Chamber", "Artery"],
+                // Dynamic selected color (RGBA) default is Green
+                selectionColor: [1.0, 0.0, 0.0, 1.0], // Red color,
+                // Set default zoom
+                defaultZoom: 1.5, // default 1.0
+                onSelectionChanged: (selectedEntities) {
+                  setState(() {
+                    _selectedEntities = selectedEntities;
+                  });
+                },
+              )
+```
+
+Load model from network URL:
+
+```dart
+Interactive3d(
+                modelUrl: 'https://modelviewer.dev/shared-assets/models/Astronaut.glb',
+                // ibl and skybox are background envs
+                iblUrl: 'https://example/your_ibl.ktx',
+                skyboxUrl: 'https://example/your_skybox.ktx',
+                // Preselection based on entity names
+                preselectedEntities: ["Chamber", "Artery"],
+                // Dynamic selected color (RGBA) default is Green
+                selectionColor: [1.0, 0.0, 0.0, 1.0], // Red color,
+                // Set default zoom
+                defaultZoom: 1.5, // default 1.0
                 onSelectionChanged: (selectedEntities) {
                   setState(() {
                     _selectedEntities = selectedEntities;
