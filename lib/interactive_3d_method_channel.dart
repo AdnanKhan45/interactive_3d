@@ -41,6 +41,7 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
     required Map<String, ByteData> resources,
     List<String>? preselectedEntities,
     List<double>? selectionColor,
+    List<PatchColor>? patchColors, // Add patchColors
   }) async {
     Uint8List modelBytes;
     String modelName;
@@ -64,12 +65,19 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
           (key, value) => MapEntry(key, value.buffer.asUint8List()),
     );
 
+    // Convert patchColors to a serializable format
+    final patchColorsMap = patchColors?.map((patch) => {
+      'name': patch.name,
+      'color': patch.color,
+    }).toList();
+
     final args = {
       'modelBytes': modelBytes,
       'name': modelName,
       'resources': resourceMap,
       'preselectedEntities': preselectedEntities,
       'selectionColor': selectionColor,
+      'patchColors': patchColorsMap, // Pass patchColors
     };
 
     await _methodChannel.invokeMethod('loadModel', args);

@@ -20,6 +20,7 @@ abstract class Interactive3dPlatform extends PlatformInterface {
     required Map<String, ByteData> resources,
     List<String>? preselectedEntities,
     List<double>? selectionColor,
+    List<PatchColor>? patchColors, // Add patchColors
   });
 
   /// Method to load the environment from assets or network URLs.

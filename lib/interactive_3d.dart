@@ -6,6 +6,17 @@ import 'package:http/http.dart' as http;
 import 'interactive_3d_method_channel.dart';
 import 'interactive_3d_platform_interface.dart';
 
+/// Represents a patch color for a specific entity in the 3D model.
+class PatchColor {
+  /// The name of the entity to apply the color to.
+  final String name;
+
+  /// The RGBA color values (0.0 to 1.0) for selection and preselection.
+  final List<double> color;
+
+  PatchColor({required this.name, required this.color});
+}
+
 /// A widget for rendering and interacting with 3D models using a native platform view.
 class Interactive3d extends StatefulWidget {
   /// Path to the 3D model file (e.g., `.glb` or `.gltf`) to be loaded from assets.
@@ -37,11 +48,14 @@ class Interactive3d extends StatefulWidget {
   /// A list of entity names to be preselected when the model is loaded.
   final List<String>? preselectedEntities;
 
-  /// A list of RGBA values (0.0 to 1.0) representing the color used to highlight selected entities.
+  /// A list of RGBA values (0.0 to 1.0) representing the default color used to highlight selected entities.
   final List<double>? selectionColor;
 
   /// The initial zoom level of the camera when the 3D model is loaded.
   final double? defaultZoom;
+
+  /// A list of PatchColor objects specifying entity-specific selection and preselection colors.
+  final List<PatchColor>? patchColors;
 
   /// Constructor for the `Interactive3d` widget.
   const Interactive3d({
@@ -57,6 +71,7 @@ class Interactive3d extends StatefulWidget {
     this.preselectedEntities,
     this.selectionColor,
     this.defaultZoom,
+    this.patchColors,
   });
 
   @override
@@ -129,6 +144,7 @@ class Interactive3dState extends State<Interactive3d> {
       resources: resources,
       preselectedEntities: widget.preselectedEntities,
       selectionColor: widget.selectionColor,
+      patchColors: widget.patchColors, // Pass patchColors
     );
 
     // Load environment.
