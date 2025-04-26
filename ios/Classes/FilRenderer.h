@@ -1,6 +1,4 @@
-
 #import <UIKit/UIKit.h>
-
 #import <Foundation/Foundation.h>
 
 #include <filament/Camera.h>
@@ -26,21 +24,39 @@
 
 #include <camutils/Manipulator.h>
 
+NS_ASSUME_NONNULL_BEGIN
+
+// Objective-C class for PatchColor
+@interface PatchColor : NSObject
+@property(nonatomic, strong) NSString *name;
+@property(nonatomic, strong) NSData *colorData; // Stores float[4]
+- (instancetype)initWithName:(NSString *)name color:(const float *)color;
+- (void)getColor:(float *)color; // Retrieves float[4]
+@end
+
 @interface FILRenderer : UIView
 
-// Filament Core Components
-@property(nonatomic, readonly) filament::Engine* engine;
-@property(nonatomic, readonly) filament::Scene* scene;
-@property(nonatomic, readonly) filament::View* view;
-@property(nonatomic, readonly) filament::Renderer* renderer;
+@property(nonatomic, strong) NSDictionary<NSString *, id> *creationParams;
 
-// Model and Environment Components
-- (void)loadModelGlb:(NSData*)buffer;
-- (void)loadModelGltf:(NSData*)buffer callback:(NSData* (^)(NSString*))callback;
-- (void)loadEnvironment:(NSData*)iblData skybox:(NSData*)skyboxData;
+typedef struct {
+    uint32_t id; // Changed to uint32_t to match Entity::getId()
+    NSString *name;
+} SelectedEntity;
+
+@property(nonatomic, copy) void (^selectionCallback)(NSArray<NSValue *> *selectedEntities);
+
+- (void)loadModel:(NSData *)modelBytes
+        modelName:(NSString *)modelName
+        resources:(NSDictionary<NSString *, NSData *> *)resources
+preselectedEntities:(nullable NSArray<NSString *> *)preselectedEntities
+    selectionColor:(nullable NSArray<NSNumber *> *)selectionColor
+      patchColors:(nullable NSArray<PatchColor *> *)patchColors;
+
+- (void)loadEnvironment:(NSData *)iblBytes skyboxBytes:(NSData *)skyboxBytes;
+- (void)setCameraZoomLevel:(float)zoom;
 - (void)render;
-
-// Cleanup
 - (void)destroyModel;
 
 @end
+
+NS_ASSUME_NONNULL_END

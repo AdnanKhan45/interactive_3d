@@ -45,7 +45,7 @@ PODS:
   - Flutter (1.0.0)
   - integration_test (0.0.1):
     - Flutter
-  - interactive_3d (0.0.2):
+  - interactive_3d (1.0.1):
     - Filament
     - Flutter
 
@@ -70,9 +70,9 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   Filament: f1f5cbe63c41a62882aeda3d594beed5b2c86fcd
   Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
-  integration_test: 252f60fa39af5e17c3aa9899d35d908a0721b573
-  interactive_3d: 74bc8074f939f1e95b2ee62fe69906749c15b3b0
+  integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
+  interactive_3d: 0851be8b6038064ac6cbef62d97be7621363e62e
 
-PODFILE CHECKSUM: 9533ac0979267b80e69e1a73396991ee61c48079
+PODFILE CHECKSUM: e388cfc30b365c537d15c6ed03756e81b0a352c8
 
 COCOAPODS: 1.16.2

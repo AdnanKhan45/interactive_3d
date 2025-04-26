@@ -9,7 +9,7 @@ homepage: https://github.com/AdnanKhan45/interactive_3d/blob/main/lib/interactiv
 
 environment:
   sdk: ^3.6.0
-  flutter: '>=3.3.0'
+  flutter: '>=3.6.0 <4.0.0'
 
 dependencies:
   flutter:
