@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'interactive_3d_controller.dart';
 import 'interactive_3d_method_channel.dart';
 import 'interactive_3d_platform_interface.dart';
 
@@ -57,6 +58,9 @@ class Interactive3d extends StatefulWidget {
   /// A list of PatchColor objects specifying entity-specific selection and preselection colors.
   final List<PatchColor>? patchColors;
 
+  /// Controller for programmatically interacting with the 3D view.
+  final Interactive3dController? controller;
+
   /// Constructor for the `Interactive3d` widget.
   const Interactive3d({
     super.key,
@@ -72,6 +76,7 @@ class Interactive3d extends StatefulWidget {
     this.selectionColor,
     this.defaultZoom,
     this.patchColors,
+    this.controller,
   });
 
   @override
@@ -88,6 +93,22 @@ class Interactive3dState extends State<Interactive3d> {
 
   /// Subscription to the selection stream for listening to selection changes.
   StreamSubscription<List<EntityData>>? _selectionSubscription;
+
+  @override
+  void initState() {
+    widget.controller?.attach(this);
+    super.initState();
+  }
+
+  @override
+  void didUpdateWidget(Interactive3d oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Reattach the controller if it changes
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller?.detach();
+      widget.controller?.attach(this);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -206,6 +227,13 @@ class Interactive3dState extends State<Interactive3d> {
     }
   }
 
+  Future<void> unselectEntities({List<int>? entityIds}) async {
+    if (_platform == null) {
+      throw StateError('Platform view not initialized');
+    }
+    await _platform!.unselectEntities(entityIds: entityIds);
+  }
+
   /// Handles selection changes and triggers the callback.
   void _onSelectionChanged(List<EntityData> selectedEntities) {
     widget.onSelectionChanged?.call(selectedEntities);
@@ -214,6 +242,7 @@ class Interactive3dState extends State<Interactive3d> {
   @override
   void dispose() {
     _selectionSubscription?.cancel();
+    widget.controller?.detach();
     super.dispose();
   }
 }

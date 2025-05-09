@@ -136,6 +136,13 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
   }
 
   @override
+  Future<void> unselectEntities({List<int>? entityIds}) async {
+    await _methodChannel.invokeMethod('unselectEntities', {
+      'entityIds': entityIds?.map((id) => id.toInt()).toList(),
+    });
+  }
+
+  @override
   Future<void> setCameraZoomLevel(double zoom) async {
     await _methodChannel.invokeMethod('setZoomLevel', {'zoom': zoom});
   }

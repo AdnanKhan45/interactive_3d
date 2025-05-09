@@ -21,7 +21,7 @@ class Interactive3DViewFactory: NSObject, FlutterPlatformViewFactory {
         viewIdentifier viewId: Int64,
         arguments args: Any?
     ) -> FlutterPlatformView {
-        return Interactive3DPlatformView(frame: frame, viewId: viewId, messenger: messenger)
+        return Interactive3DPlatformView(frame: frame, viewId: viewId, messenger: messenger, args: args)
     }
 
     func createArgsCodec() -> FlutterMessageCodec & NSObjectProtocol {
@@ -30,27 +30,38 @@ class Interactive3DViewFactory: NSObject, FlutterPlatformViewFactory {
 }
 
 class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHandler {
-    // Filament renderer (actual native implementation, not a custom view)
     private let filamentRenderer: FILRenderer
-
-    // Channels for communication
     private let methodChannel: FlutterMethodChannel
     private let eventChannel: FlutterEventChannel
     private var eventSink: FlutterEventSink?
 
-    init(frame: CGRect, viewId: Int64, messenger: FlutterBinaryMessenger) {
-        // Initialize the Filament renderer
+    init(frame: CGRect, viewId: Int64, messenger: FlutterBinaryMessenger, args: Any?) {
         filamentRenderer = FILRenderer(frame: frame)
-
-        // Initialize method and event channels
         methodChannel = FlutterMethodChannel(name: "interactive_3d_\(viewId)", binaryMessenger: messenger)
         eventChannel = FlutterEventChannel(name: "interactive_3d_events_\(viewId)", binaryMessenger: messenger)
 
         super.init()
 
-        // Set handlers for method and event channels
         methodChannel.setMethodCallHandler(handleMethodCall)
         eventChannel.setStreamHandler(self)
+
+        if let params = args as? [String: Any] {
+            filamentRenderer.creationParams = params
+        }
+
+        filamentRenderer.selectionCallback = { [weak self] selectedEntities in
+            let event = [
+                "event": "selectionChanged",
+                "selectedEntities": selectedEntities.map { entity in
+                    var selected: SelectedEntity = SelectedEntity()
+                    entity.getValue(&selected)
+                    return ["id": selected.id, "name": selected.name ?? ""]
+                }
+            ]
+            DispatchQueue.main.async {
+                self?.eventSink?(event)
+            }
+        }
     }
 
     func view() -> UIView {
@@ -61,42 +72,40 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
         filamentRenderer.destroyModel()
     }
 
-    // Handle method calls from Flutter
     private func handleMethodCall(call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
         case "loadModel":
             guard let args = call.arguments as? [String: Any],
                   let modelBytes = (args["modelBytes"] as? FlutterStandardTypedData)?.data,
                   let modelName = args["name"] as? String,
-                  let resources = args["resources"] as? [String: FlutterStandardTypedData] else {
+                  let resources = args["resources"] as? [String: FlutterStandardTypedData],
+                  let preselectedEntities = args["preselectedEntities"] as? [String]?,
+                  let selectionColor = args["selectionColor"] as? [Double]? else {
                 result(FlutterError(code: "INVALID_ARGUMENT", message: "Invalid arguments for loadModel", details: nil))
                 return
             }
 
-
-            // Determine if it's a .gltf or .glb file
-            if modelName.lowercased().hasSuffix(".gltf") {
-                // Load the model into Filament
-                filamentRenderer.loadModelGltf(modelBytes) { resourceName in
-                    guard let resourceName = resourceName else {
-                        return Data() // Return empty data if resourceName is nil
-                    }
-                    return resources[resourceName]?.data ?? Data()
+            let resourceMap = resources.mapValues { $0.data }
+            var patchColors: [PatchColor]? = nil
+            if let patchColorsData = args["patchColors"] as? [[String: Any]] {
+                patchColors = patchColorsData.map { patch in
+                    let name = patch["name"] as? String ?? ""
+                    let color = (patch["color"] as? [Double])?.map { Float($0) } ?? [0.0, 1.0, 0.0, 1.0]
+                    return PatchColor(name: name, color: color)
                 }
-
-                print("Loaded GLTF model: \(modelName)")
-            } else if modelName.lowercased().hasSuffix(".glb") {
-                filamentRenderer.loadModelGlb(modelBytes)
-                print("Loaded GLB model: \(modelName)")
-            } else {
-                print("Unsupported model format: \(modelName)")
-                result(FlutterError(code: "UNSUPPORTED_FORMAT", message: "Only .gltf and .glb formats are supported", details: nil))
-                return
             }
 
-
-
-            result(nil)
+            DispatchQueue.main.async { [weak self] in
+                self?.filamentRenderer.loadModel(
+                    modelBytes: modelBytes,
+                    modelName: modelName,
+                    resources: resourceMap,
+                    preselectedEntities: preselectedEntities,
+                    selectionColor: selectionColor?.map { NSNumber(value: $0) },
+                    patchColors: patchColors
+                )
+                result(nil)
+            }
 
         case "loadEnvironment":
             guard let args = call.arguments as? [String: Any],
@@ -106,16 +115,28 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
                 return
             }
 
-            // Load the environment textures
-            filamentRenderer.loadEnvironment(iblBytes, skybox: skyboxBytes)
-            result(nil)
+            DispatchQueue.main.async { [weak self] in
+                self?.filamentRenderer.loadEnvironment(iblBytes: iblBytes, skyboxBytes: skyboxBytes)
+                result(nil)
+            }
+
+        case "setZoomLevel":
+            guard let args = call.arguments as? [String: Any],
+                  let zoom = args["zoom"] as? Double else {
+                result(FlutterError(code: "INVALID_ARGUMENT", message: "Invalid zoom value", details: nil))
+                return
+            }
+
+            DispatchQueue.main.async { [weak self] in
+                self?.filamentRenderer.setCameraZoomLevel(Float(zoom))
+                result(nil)
+            }
 
         default:
             result(FlutterMethodNotImplemented)
         }
     }
 
-    // Handle events for EventChannel
     func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
         self.eventSink = events
         return nil

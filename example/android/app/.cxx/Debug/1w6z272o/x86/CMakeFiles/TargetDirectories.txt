@@ -1,0 +1,2 @@
+/Users/muhammadadnan/StudioProjects/interactive_3D/example/android/app/.cxx/Debug/1w6z272o/x86/CMakeFiles/edit_cache.dir
+/Users/muhammadadnan/StudioProjects/interactive_3D/example/android/app/.cxx/Debug/1w6z272o/x86/CMakeFiles/rebuild_cache.dir

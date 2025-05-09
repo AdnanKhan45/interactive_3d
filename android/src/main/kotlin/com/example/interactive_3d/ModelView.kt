@@ -307,6 +307,30 @@ class ModelView : LinearLayout {
         selectionListener?.onSelectionChanged(items)
     }
 
+    /**
+     * Unselects the specified entities or all entities if none are provided.
+     * @param entities List of entity IDs to unselect, or null to unselect all.
+     */
+    fun unselectEntities(entities: List<Long>? = null) {
+        if (entities == null) {
+            // Clear all selections
+            selectedEntities.forEach { entity ->
+                resetRenderableColor(entity)
+            }
+            selectedEntities.clear()
+        } else {
+            // Unselect specific entities
+            entities.forEach { entityId ->
+                val entity = entityId.toInt()
+                if (selectedEntities.contains(entity)) {
+                    resetRenderableColor(entity)
+                    selectedEntities.remove(entity)
+                }
+            }
+        }
+        sendSelectedEntitiesToFlutter()
+    }
+
     private fun setRenderableColor(entity: Int, r: Float, g: Float, b: Float, a: Float) {
         val rcm = modelViewer.engine.renderableManager
         if (!rcm.hasComponent(entity)) return

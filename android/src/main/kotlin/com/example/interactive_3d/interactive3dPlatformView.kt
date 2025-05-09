@@ -120,6 +120,13 @@ class Interactive3dPlatformView(
                     result.error("INVALID_ARGUMENT", "Zoom value is null", null)
                 }
             }
+            "unselectEntities" -> {
+                val entityIds = call.argument<List<Long>?>("entityIds")
+                mainHandler.post {
+                    customView.unselectEntities(entityIds)
+                    result.success(null)
+                }
+            }
 
             else -> result.notImplemented()
         }
