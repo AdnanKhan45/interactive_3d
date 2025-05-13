@@ -94,6 +94,11 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
                     name: "Tounge_Upper_R",
                     color: [0.58, 0.50, 0.43, 1.0],
                   ),
+
+                  PatchColor(
+                    name: "Neck",
+                    color: [0.58, 0.50, 0.43, 1.0],
+                  ),
                 ],
               )),
               Container(

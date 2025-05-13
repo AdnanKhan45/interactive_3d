@@ -12,6 +12,8 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
     private var originalMaterials: [SCNNode: SCNMaterial] = [:]
     private var cameraNode: SCNNode?
     private var pendingPreselectedEntities: [String]?
+    private var patchColors: [[String: Any]]?
+    private var selectionColor: [Double]?
 
     init(
         frame: CGRect,
@@ -66,10 +68,14 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
                 return
             }
             let preselectedEntities = args["preselectedEntities"] as? [String]
+            let patchColors = args["patchColors"] as? [[String: Any]]
+            let selectionColor = args["selectionColor"] as? [Double]
 
             DispatchQueue.main.async { [weak self] in
                 do {
                     self?.pendingPreselectedEntities = preselectedEntities
+                    self?.patchColors = patchColors
+                    self?.selectionColor = selectionColor
                     try self?.loadModel(modelBytes: modelBytes)
                     result(nil)
                 } catch {
@@ -207,11 +213,13 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
 
         scnView.scene?.rootNode.enumerateChildNodes { (node, _) in
             if let nodeName = node.name, preselectedEntities.contains(nodeName) {
-                if let geometryNode = findGeometryNode(in: node) {
-                    selectedNodes.insert(node)
-                    applyHighlight(to: geometryNode)
-                    NSLog("Preselected node: \(nodeName)")
+                guard let geometryNode = findGeometryNode(in: node) else {
+                    NSLog("No geometry node found for preselected: \(nodeName)")
+                    return
                 }
+                selectedNodes.insert(node)
+                applyHighlight(to: geometryNode, forNodeName: nodeName)
+                NSLog("Preselected node: \(nodeName)")
             }
         }
         sendSelectionUpdate()
@@ -321,7 +329,7 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             NSLog("Deselected: \(nameNode.name ?? "Unnamed")")
         } else {
             selectedNodes.insert(nameNode)
-            applyHighlight(to: highlightNode)
+            applyHighlight(to: highlightNode, forNodeName: nameNode.name)
             NSLog("Selected: \(nameNode.name ?? "Unnamed")")
         }
 
@@ -342,7 +350,41 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
         return nil
     }
 
-    private func applyHighlight(to node: SCNNode) {
+    private func getEntityColor(nodeName: String?) -> UIColor {
+        // Check for patchColors first
+        if let nodeName = nodeName, let patchColors = patchColors {
+            for patch in patchColors {
+                if let name = patch["name"] as? String, name == nodeName {
+                    if let color = patch["color"] as? [Double], color.count == 4 {
+                        NSLog("Matched patch color for \(nodeName): \(color)")
+                        return UIColor(
+                            red: CGFloat(color[0]),
+                            green: CGFloat(color[1]),
+                            blue: CGFloat(color[2]),
+                            alpha: CGFloat(color[3])
+                        )
+                    }
+                }
+            }
+        }
+
+        // Fallback to selectionColor if provided
+        if let color = selectionColor, color.count == 4 {
+            NSLog("Using selectionColor: \(color)")
+            return UIColor(
+                red: CGFloat(color[0]),
+                green: CGFloat(color[1]),
+                blue: CGFloat(color[2]),
+                alpha: CGFloat(color[3])
+            )
+        }
+
+        // Default to red if no selectionColor is provided
+        NSLog("Falling back to default red color")
+        return UIColor.red
+    }
+
+    private func applyHighlight(to node: SCNNode, forNodeName nodeName: String?) {
         guard let geometry = node.geometry, let material = geometry.firstMaterial else {
             NSLog("No geometry or material for node: \(node.name ?? "Unnamed")")
             return
@@ -353,10 +395,11 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             originalMaterials[node] = material.copy() as? SCNMaterial
         }
 
-        material.diffuse.contents = UIColor.red
-        material.emission.contents = UIColor.red.withAlphaComponent(0.3)
-        material.multiply.contents = UIColor.red
-        NSLog("Applied red highlight to: \(node.name ?? "Unnamed")")
+        let highlightColor = getEntityColor(nodeName: nodeName)
+        material.diffuse.contents = highlightColor
+        material.emission.contents = highlightColor.withAlphaComponent(0.3)
+        material.multiply.contents = highlightColor
+        NSLog("Applied highlight color \(highlightColor) to: \(node.name ?? "Unnamed") for nodeName: \(nodeName ?? "None")")
     }
 
     private func resetNodeColor(_ node: SCNNode) {
