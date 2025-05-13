@@ -97,6 +97,13 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
                 result(nil)
             }
 
+        case "unselectEntities":
+            let entityIds = call.arguments as? [Int]
+            DispatchQueue.main.async { [weak self] in
+                self?.unselectEntities(entityIds: entityIds)
+                result(nil)
+            }
+
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -209,6 +216,30 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
         }
         sendSelectionUpdate()
         pendingPreselectedEntities = nil
+    }
+
+    private func unselectEntities(entityIds: [Int]?) {
+        if let ids = entityIds {
+            // Unselect specific entities
+            let nodesToRemove = selectedNodes.filter { ids.contains($0.hash) }
+            for node in nodesToRemove {
+                if let geometryNode = findGeometryNode(in: node) {
+                    resetNodeColor(geometryNode)
+                    selectedNodes.remove(node)
+                    NSLog("Unselected node: \(node.name ?? "Unnamed")")
+                }
+            }
+        } else {
+            // Clear all selections
+            for node in selectedNodes {
+                if let geometryNode = findGeometryNode(in: node) {
+                    resetNodeColor(geometryNode)
+                    NSLog("Unselected node: \(node.name ?? "Unnamed")")
+                }
+            }
+            selectedNodes.removeAll()
+        }
+        sendSelectionUpdate()
     }
 
     private func setCameraZoomLevel(zoomLevel: Float) {
