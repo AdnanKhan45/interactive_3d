@@ -10,6 +10,9 @@ class GlbLoaderExample extends StatefulWidget {
   GlbLoaderExampleState createState() => GlbLoaderExampleState();
 }
 
+// Updated camera zoomLevel: 2.5, position: SCNVector3(x: 0.0, y: 0.0, z: 0.64142126)
+// Updated camera zoomLevel: 2.5, position: SCNVector3(x: 0.0, y: 0.0, z: 0.5)
+
 class GlbLoaderExampleState extends State<GlbLoaderExample> {
   List<EntityData> _selectedEntities = [];
 
@@ -36,7 +39,7 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
                   "Neck"
                 ],
                 selectionColor: [0.32, 0.49, 0.55, 1.0], // Light Blue Color
-                defaultZoom: 1.5,
+                defaultZoom: 2,
                 onSelectionChanged: (selectedEntities) {
                   setState(() {
                     _selectedEntities = selectedEntities;

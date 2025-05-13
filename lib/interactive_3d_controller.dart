@@ -27,4 +27,11 @@ class Interactive3dController {
   Future<void> clearSelections() async {
     await unselectEntities();
   }
+
+  Future<void> setCameraZoomLevel(double zoomLevel) async {
+    if (_state == null) {
+      throw StateError('Controller is not attached to a widget');
+    }
+    await _state!.setZoom(zoomLevel);
+  }
 }

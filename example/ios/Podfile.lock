@@ -1,63 +1,21 @@
 PODS:
-  - Filament (1.56.6):
-    - Filament/camutils (= 1.56.6)
-    - Filament/filamat (= 1.56.6)
-    - Filament/filament (= 1.56.6)
-    - Filament/filameshio (= 1.56.6)
-    - Filament/gltfio_core (= 1.56.6)
-    - Filament/image (= 1.56.6)
-    - Filament/ktxreader (= 1.56.6)
-    - Filament/math (= 1.56.6)
-    - Filament/tsl (= 1.56.6)
-    - Filament/uberz (= 1.56.6)
-    - Filament/utils (= 1.56.6)
-    - Filament/viewer (= 1.56.6)
-  - Filament/camutils (1.56.6):
-    - Filament/math
-  - Filament/filamat (1.56.6):
-    - Filament/math
-    - Filament/utils
-  - Filament/filament (1.56.6):
-    - Filament/math
-    - Filament/utils
-  - Filament/filameshio (1.56.6):
-    - Filament/filament
-  - Filament/gltfio_core (1.56.6):
-    - Filament/filament
-    - Filament/ktxreader
-    - Filament/uberz
-  - Filament/image (1.56.6):
-    - Filament/filament
-  - Filament/ktxreader (1.56.6):
-    - Filament/filament
-    - Filament/image
-  - Filament/math (1.56.6)
-  - Filament/tsl (1.56.6)
-  - Filament/uberz (1.56.6):
-    - Filament/filamat
-    - Filament/tsl
-    - Filament/utils
-  - Filament/utils (1.56.6):
-    - Filament/tsl
-  - Filament/viewer (1.56.6):
-    - Filament/filament
-    - Filament/gltfio_core
   - Flutter (1.0.0)
+  - GLTFSceneKit (0.3.0)
   - integration_test (0.0.1):
     - Flutter
   - interactive_3d (0.0.2):
-    - Filament
     - Flutter
+    - GLTFSceneKit (~> 0.3.0)
 
 DEPENDENCIES:
-  - Filament
   - Flutter (from `Flutter`)
+  - GLTFSceneKit
   - integration_test (from `.symlinks/plugins/integration_test/ios`)
   - interactive_3d (from `.symlinks/plugins/interactive_3d/ios`)
 
 SPEC REPOS:
   trunk:
-    - Filament
+    - GLTFSceneKit
 
 EXTERNAL SOURCES:
   Flutter:
@@ -68,11 +26,11 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/interactive_3d/ios"
 
 SPEC CHECKSUMS:
-  Filament: f1f5cbe63c41a62882aeda3d594beed5b2c86fcd
   Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
+  GLTFSceneKit: d1b437c514ba2aed5555afb0fddd64e030612d57
   integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
-  interactive_3d: 073d28e03c1f1fce3997beddd4bffa879572963c
+  interactive_3d: 7d691b9bc1ecb9bfd4b7df47f4e55bb19b30f581
 
-PODFILE CHECKSUM: 9533ac0979267b80e69e1a73396991ee61c48079
+PODFILE CHECKSUM: 984ae68da4551b355f9df642e1bf4b67d85f5215
 
 COCOAPODS: 1.16.2

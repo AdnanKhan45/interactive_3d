@@ -169,17 +169,23 @@ class Interactive3dState extends State<Interactive3d> {
     );
 
     // Load environment.
-    await _platform!.loadEnvironment(
-      iblPath: widget.iblPath,
-      iblUrl: widget.iblUrl,
-      skyboxPath: widget.skyboxPath,
-      skyboxUrl: widget.skyboxUrl,
-    );
-
-    // Set the default zoom level if provided.
-    if (widget.defaultZoom != null) {
-      await _platform!.setCameraZoomLevel(widget.defaultZoom!);
+    if(Platform.isAndroid) {
+      await _platform!.loadEnvironment(
+        iblPath: widget.iblPath,
+        iblUrl: widget.iblUrl,
+        skyboxPath: widget.skyboxPath,
+        skyboxUrl: widget.skyboxUrl,
+      );
     }
+
+    if(widget.defaultZoom != null) {
+      await setZoom(widget.defaultZoom);
+    }
+  }
+
+  // Set the default zoom level if provided.
+  Future<void> setZoom(double? level) async {
+    await _platform!.setCameraZoomLevel(level ?? widget.defaultZoom!);
   }
 
   /// Loads additional resources required for `.gltf` models.
