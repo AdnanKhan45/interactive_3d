@@ -1,6 +1,6 @@
 # interactive_3d [![Pub](https://img.shields.io/pub/v/interactive_3d.svg)](https://pub.dev/packages/interactive_3d)
 
-![Logo](assets/FlutterFilament_logo.png)
+![Logo](assets/FlutterFilament_logo_v2.png)
 
 `interactive_3d` is an open-source Flutter plugin for rendering interactive 3d models `.glb` or `.gltf` using the Filament Engine. Currently supported only on Android. The code is available open-source with MIT license, your contribution to this would highly be appreciated.
 
@@ -8,13 +8,17 @@
 
 ## Features
 
-✅  Render 3D models of type `.glb` and `.gltf`.
+✅ Render 3D models of type `.glb` and `.gltf` from both (assets & network).
 
-✅  Load models background environments ibl and skybox `.ktx` files.
+✅ Load models background environments ibl and skybox `.ktx` files.
 
-✅  Interactive gestures to rotate, pan, and tap on models.
+✅ Interactive gestures to rotate, pan, and tap on models.
 
-✅  Extract data from interactions and use it in your flutter app.
+✅ Change selected and preselected colors of any part using name.
+
+✅ Update default zoom.
+
+✅ Extract data from interactions and use it in your flutter app.
 
 ## Generate IBL & Skybox
 
@@ -28,20 +32,17 @@ For example:
 cmgen --format=ktx --deploy=san_guiseppe ~/Downloads/san_giuseppe_bridge_4k.hdr 
 ```
 
-## Demo
+## Demo  (Android & iOS)
 
-<p float="left">
- <img src="https://media.giphy.com/media/LpzldzEwdglpoRJnrU/giphy.gif" width=200 />
- <img src="https://media.giphy.com/media/nK7JDBH330RSaqi5y6/giphy.gif" width=200 />
- <img src="https://media.giphy.com/media/YTh9FdZIaIqZd6KXR6/giphy.gif" width=200 />
-</p>
+<p float="left">  
+ <img src="https://media.giphy.com/media/LpzldzEwdglpoRJnrU/giphy.gif" width=200 />  
+ <img src="https://media.giphy.com/media/nK7JDBH330RSaqi5y6/giphy.gif" width=200 />  
+ <img src="https://media.giphy.com/media/YTh9FdZIaIqZd6KXR6/giphy.gif" width=200 />  
+  <img src="https://media.giphy.com/media/aGAkEIzub789i3JVp1/giphy.gif" width=200 />  
+</p>  
 
 ## Future features
 I'm actively working on this plugin and currently focusing mainly on Android. Below mentioned features will be added, if you have something great in mind and want to contribute, MOST WELCOME 🤗
-
-🚀 Light customization support
-
-🚀 Camera customization support
 
 🚀 Add horizontal scroll indicators to hide or show specific parts of the model.
 
@@ -71,6 +72,13 @@ Interactive3d(
                 // Set default zoom
                 defaultZoom: 1.5, // default 1.0
                 preselectedEntities: ["Teeth_1", "Teeth_2", "Lower_Jaw"],
+                // Set arbitrary color for selected or preselected part   
+                patchColors: [
+                 PatchColor(
+                   name: "Hard_Plate_L",
+                   color: [0.41, 0.35, 0.51, 1.0],
+                   ...
+                ),
                 resources: [
                   'scene.bin',
                   'textures/mouth_baseColor.png',
@@ -102,6 +110,13 @@ Interactive3d(
                 selectionColor: [1.0, 0.0, 0.0, 1.0], // Red color,
                 // Set default zoom
                 defaultZoom: 1.5, // default 1.0
+                // Set arbitrary color for selected or preselected part   
+                patchColors: [
+                 PatchColor(
+                   name: "Hard_Plate_L",
+                   color: [0.41, 0.35, 0.51, 1.0],
+                   ...
+                ),
                 onSelectionChanged: (selectedEntities) {
                   setState(() {
                     _selectedEntities = selectedEntities;
@@ -124,6 +139,13 @@ Interactive3d(
                 selectionColor: [1.0, 0.0, 0.0, 1.0], // Red color,
                 // Set default zoom
                 defaultZoom: 1.5, // default 1.0
+                // Set arbitrary color for selected or preselected part   
+                patchColors: [
+                 PatchColor(
+                   name: "Hard_Plate_L",
+                   color: [0.41, 0.35, 0.51, 1.0],
+                   ...
+                ),
                 onSelectionChanged: (selectedEntities) {
                   setState(() {
                     _selectedEntities = selectedEntities;

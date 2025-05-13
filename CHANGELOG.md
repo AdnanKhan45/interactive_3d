@@ -1,3 +1,11 @@
+## 1.2.0
+
+* 4th release of `interactive_3d`.
+- Features:
+  - Patch Colors (update selected & preselected colors).
+  - Interactive3dController introduced.
+  - iOS Support with all features on Android 🚀
+
 ## 1.0.1
 
 * 3nd release of `interactive_3d`.

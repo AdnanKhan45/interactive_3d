@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'interactive_3d'
-  s.version          = '0.0.2'
+  s.version          = '1.2.0'
   s.summary          = 'A plugin to render interactive 3D model in .gLTF or .glb using Filament Engine'
   s.description      = <<-DESC
 A plugin to render interactive 3D model in .gLTF or .glb
