@@ -11,6 +11,7 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
     private var selectedNodes: Set<SCNNode> = []
     private var originalMaterials: [SCNNode: SCNMaterial] = [:]
     private var cameraNode: SCNNode?
+    private var pendingPreselectedEntities: [String]?
 
     init(
         frame: CGRect,
@@ -64,9 +65,11 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
                 ))
                 return
             }
+            let preselectedEntities = args["preselectedEntities"] as? [String]
 
             DispatchQueue.main.async { [weak self] in
                 do {
+                    self?.pendingPreselectedEntities = preselectedEntities
                     try self?.loadModel(modelBytes: modelBytes)
                     result(nil)
                 } catch {
@@ -181,10 +184,31 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
 
         scnView.scene = scene
 
+        applyPreselectedEntities()
+
         printSceneHierarchy(scene.rootNode, level: 0)
         NSLog("Camera point of view: \(scnView.pointOfView?.name ?? "None")")
         NSLog("Scene node count: \(scene.rootNode.childNodes.count)")
         NSLog("SCNView bounds: \(scnView.bounds)")
+    }
+
+    private func applyPreselectedEntities() {
+        guard let preselectedEntities = pendingPreselectedEntities, !preselectedEntities.isEmpty else {
+            NSLog("No preselected entities to apply")
+            return
+        }
+
+        scnView.scene?.rootNode.enumerateChildNodes { (node, _) in
+            if let nodeName = node.name, preselectedEntities.contains(nodeName) {
+                if let geometryNode = findGeometryNode(in: node) {
+                    selectedNodes.insert(node)
+                    applyHighlight(to: geometryNode)
+                    NSLog("Preselected node: \(nodeName)")
+                }
+            }
+        }
+        sendSelectionUpdate()
+        pendingPreselectedEntities = nil
     }
 
     private func setCameraZoomLevel(zoomLevel: Float) {
