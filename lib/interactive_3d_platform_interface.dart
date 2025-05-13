@@ -20,6 +20,7 @@ abstract class Interactive3dPlatform extends PlatformInterface {
     required Map<String, ByteData> resources,
     List<String>? preselectedEntities,
     List<double>? selectionColor,
+    List<PatchColor>? patchColors, // Add patchColors
   });
 
   /// Method to load the environment from assets or network URLs.
@@ -32,6 +33,9 @@ abstract class Interactive3dPlatform extends PlatformInterface {
 
   /// Method to set the camera position.
   Future<void> setCameraZoomLevel(double zoom);
+
+  /// Method to unselect entities in the 3D model.
+  Future<void> unselectEntities({List<int>? entityIds});
 
   /// Stream to receive selection changes.
   Stream<List<EntityData>> get selectionStream;

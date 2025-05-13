@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'interactive_3d'
-  s.version          = '0.0.2'
+  s.version          = '1.2.0'
   s.summary          = 'A plugin to render interactive 3D model in .gLTF or .glb using Filament Engine'
   s.description      = <<-DESC
 A plugin to render interactive 3D model in .gLTF or .glb
@@ -13,24 +13,17 @@ A plugin to render interactive 3D model in .gLTF or .glb
   s.license          = { :file => '../LICENSE' }
   s.author           = { 'Muhammad Adnan' => 'ak187429@gmail.com' }
   s.source           = { :path => '.' }
-  s.source_files = 'Classes/**/*.{h,mm}'
+  s.source_files = 'Classes/**/*'
   s.dependency 'Flutter'
-  s.dependency 'Filament'
-  s.platform = :ios, '13.0'
+  s.dependency 'GLTFSceneKit', '~> 0.3.0'
+  s.platform = :ios, '12.0'
 
   # Flutter.framework does not contain a i386 slice.
   s.pod_target_xcconfig = {
   'DEFINES_MODULE' => 'YES',
-  'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386',
-  'SWIFT_OBJC_BRIDGING_HEADER' => 'Classes/Interactive_3d-Bridging-Header.h',
-  'CLANG_CXX_LANGUAGE_STANDARD' => 'c++17',
-  'CLANG_CXX_LIBRARY' => 'libc++',
-   }
+  'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386'}
+
   s.swift_version = '5.0'
-  s.xcconfig = {
-    'HEADER_SEARCH_PATHS' => '"${PODS_ROOT}/Filament/include"',
-    'OTHER_LDFLAGS' => '-lfilament -lgltfio'
-  }
   # If your plugin requires a privacy manifest, for example if it uses any
   # required reason APIs, update the PrivacyInfo.xcprivacy file to describe your
   # plugin's privacy impact, and then uncomment this line. For more information,

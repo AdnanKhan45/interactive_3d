@@ -81,11 +81,12 @@ class Interactive3dPlatformView(
                 val resources = call.argument<Map<String, ByteArray>>("resources") ?: emptyMap()
                 val preselectedEntities = call.argument<List<String>?>("preselectedEntities")
                 val selectionColor = call.argument<List<Double>?>("selectionColor")
+                val patchColors = call.argument<List<Map<String, Any>>>("patchColors") // Receive patchColors
 
                 if (modelBytes != null && modelName != null) {
                     val buffer = ByteBuffer.wrap(modelBytes)
                     mainHandler.post {
-                        customView.setModel(buffer, modelName, resources, preselectedEntities, selectionColor)
+                        customView.setModel(buffer, modelName, resources, preselectedEntities, selectionColor, patchColors)
                         result.success(null)
                     }
                 } else {
@@ -119,6 +120,13 @@ class Interactive3dPlatformView(
                     result.error("INVALID_ARGUMENT", "Zoom value is null", null)
                 }
             }
+            "unselectEntities" -> {
+                val entityIds = call.argument<List<Long>?>("entityIds")
+                mainHandler.post {
+                    customView.unselectEntities(entityIds)
+                    result.success(null)
+                }
+            }
 
             else -> result.notImplemented()
         }
@@ -133,5 +141,4 @@ class Interactive3dPlatformView(
     override fun onCancel(arguments: Any?) {
         eventSink = null
     }
-
 }

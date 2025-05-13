@@ -3,8 +3,20 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'interactive_3d_controller.dart';
 import 'interactive_3d_method_channel.dart';
 import 'interactive_3d_platform_interface.dart';
+
+/// Represents a patch color for a specific entity in the 3D model.
+class PatchColor {
+  /// The name of the entity to apply the color to.
+  final String name;
+
+  /// The RGBA color values (0.0 to 1.0) for selection and preselection.
+  final List<double> color;
+
+  PatchColor({required this.name, required this.color});
+}
 
 /// A widget for rendering and interacting with 3D models using a native platform view.
 class Interactive3d extends StatefulWidget {
@@ -37,11 +49,17 @@ class Interactive3d extends StatefulWidget {
   /// A list of entity names to be preselected when the model is loaded.
   final List<String>? preselectedEntities;
 
-  /// A list of RGBA values (0.0 to 1.0) representing the color used to highlight selected entities.
+  /// A list of RGBA values (0.0 to 1.0) representing the default color used to highlight selected entities.
   final List<double>? selectionColor;
 
   /// The initial zoom level of the camera when the 3D model is loaded.
   final double? defaultZoom;
+
+  /// A list of PatchColor objects specifying entity-specific selection and preselection colors.
+  final List<PatchColor>? patchColors;
+
+  /// Controller for programmatically interacting with the 3D view.
+  final Interactive3dController? controller;
 
   /// Constructor for the `Interactive3d` widget.
   const Interactive3d({
@@ -57,6 +75,8 @@ class Interactive3d extends StatefulWidget {
     this.preselectedEntities,
     this.selectionColor,
     this.defaultZoom,
+    this.patchColors,
+    this.controller,
   });
 
   @override
@@ -73,6 +93,22 @@ class Interactive3dState extends State<Interactive3d> {
 
   /// Subscription to the selection stream for listening to selection changes.
   StreamSubscription<List<EntityData>>? _selectionSubscription;
+
+  @override
+  void initState() {
+    widget.controller?.attach(this);
+    super.initState();
+  }
+
+  @override
+  void didUpdateWidget(Interactive3d oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Reattach the controller if it changes
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller?.detach();
+      widget.controller?.attach(this);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -129,20 +165,27 @@ class Interactive3dState extends State<Interactive3d> {
       resources: resources,
       preselectedEntities: widget.preselectedEntities,
       selectionColor: widget.selectionColor,
+      patchColors: widget.patchColors, // Pass patchColors
     );
 
     // Load environment.
-    await _platform!.loadEnvironment(
-      iblPath: widget.iblPath,
-      iblUrl: widget.iblUrl,
-      skyboxPath: widget.skyboxPath,
-      skyboxUrl: widget.skyboxUrl,
-    );
-
-    // Set the default zoom level if provided.
-    if (widget.defaultZoom != null) {
-      await _platform!.setCameraZoomLevel(widget.defaultZoom!);
+    if(Platform.isAndroid) {
+      await _platform!.loadEnvironment(
+        iblPath: widget.iblPath,
+        iblUrl: widget.iblUrl,
+        skyboxPath: widget.skyboxPath,
+        skyboxUrl: widget.skyboxUrl,
+      );
     }
+
+    if(widget.defaultZoom != null) {
+      await setZoom(widget.defaultZoom);
+    }
+  }
+
+  // Set the default zoom level if provided.
+  Future<void> setZoom(double? level) async {
+    await _platform!.setCameraZoomLevel(level ?? widget.defaultZoom!);
   }
 
   /// Loads additional resources required for `.gltf` models.
@@ -190,6 +233,13 @@ class Interactive3dState extends State<Interactive3d> {
     }
   }
 
+  Future<void> unselectEntities({List<int>? entityIds}) async {
+    if (_platform == null) {
+      throw StateError('Platform view not initialized');
+    }
+    await _platform!.unselectEntities(entityIds: entityIds);
+  }
+
   /// Handles selection changes and triggers the callback.
   void _onSelectionChanged(List<EntityData> selectedEntities) {
     widget.onSelectionChanged?.call(selectedEntities);
@@ -198,6 +248,7 @@ class Interactive3dState extends State<Interactive3d> {
   @override
   void dispose() {
     _selectionSubscription?.cancel();
+    widget.controller?.detach();
     super.dispose();
   }
 }

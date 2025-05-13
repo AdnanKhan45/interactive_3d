@@ -50,6 +50,7 @@ class ModelView : LinearLayout {
     private var pendingPreselectedEntities: List<String>? = null
     private var modelLoaded = false
     private var selectionColor: FloatArray? = null // Store RGBA as [r, g, b, a]
+    private var patchColors: List<Map<String, Any>>? = null // Store entity-specific colors
 
     /**
      * Listener interface for selection changes in the 3D model.
@@ -147,14 +148,15 @@ class ModelView : LinearLayout {
     }
 
     /**
-     * Loads a 3D model (GLB or GLTF) with optional preselected entities and selection color.
+     * Loads a 3D model (GLB or GLTF) with optional preselected entities, selection color, and patch colors.
      */
     fun setModel(
         buffer: ByteBuffer,
         fileName: String,
         resources: Map<String, ByteArray>,
         preselectedEntities: List<String>?,
-        selectionColor: List<Double>?
+        selectionColor: List<Double>?,
+        patchColors: List<Map<String, Any>>? // Add patchColors
     ) {
         this.pendingPreselectedEntities = preselectedEntities
         this.selectionColor = if (selectionColor?.size == 4) {
@@ -167,6 +169,7 @@ class ModelView : LinearLayout {
         } else {
             floatArrayOf(0.0f, 1.0f, 0.0f, 1.0f) // Default green
         }
+        this.patchColors = patchColors // Store patchColors
         setModel(buffer, fileName, resources)
     }
 
@@ -255,6 +258,25 @@ class ModelView : LinearLayout {
         Log.d(TAG, "ModelView destroyed")
     }
 
+    private fun getEntityColor(entityName: String?): FloatArray {
+        if (entityName == null) return selectionColor ?: floatArrayOf(0.0f, 1.0f, 0.0f, 1.0f)
+
+        patchColors?.forEach { patch ->
+            if (patch["name"] == entityName) {
+                val color = patch["color"] as? List<Double>
+                if (color?.size == 4) {
+                    return floatArrayOf(
+                        color[0].toFloat(),
+                        color[1].toFloat(),
+                        color[2].toFloat(),
+                        color[3].toFloat()
+                    )
+                }
+            }
+        }
+        return selectionColor ?: floatArrayOf(0.0f, 1.0f, 0.0f, 1.0f) // Fallback to global color
+    }
+
     private fun applyPreselectedEntities() {
         if (pendingPreselectedEntities == null || !modelLoaded) return
 
@@ -262,7 +284,7 @@ class ModelView : LinearLayout {
             modelViewer.asset?.getEntities()?.forEach { entity ->
                 val entityName = modelViewer.asset?.getName(entity)
                 if (name == entityName && entity !in selectedEntities) {
-                    val color = selectionColor ?: floatArrayOf(0.0f, 1.0f, 0.0f, 1.0f)
+                    val color = getEntityColor(entityName)
                     setRenderableColor(entity, color[0], color[1], color[2], color[3])
                     selectedEntities.add(entity)
                 }
@@ -283,6 +305,30 @@ class ModelView : LinearLayout {
             }
         }
         selectionListener?.onSelectionChanged(items)
+    }
+
+    /**
+     * Unselects the specified entities or all entities if none are provided.
+     * @param entities List of entity IDs to unselect, or null to unselect all.
+     */
+    fun unselectEntities(entities: List<Long>? = null) {
+        if (entities == null) {
+            // Clear all selections
+            selectedEntities.forEach { entity ->
+                resetRenderableColor(entity)
+            }
+            selectedEntities.clear()
+        } else {
+            // Unselect specific entities
+            entities.forEach { entityId ->
+                val entity = entityId.toInt()
+                if (selectedEntities.contains(entity)) {
+                    resetRenderableColor(entity)
+                    selectedEntities.remove(entity)
+                }
+            }
+        }
+        sendSelectedEntitiesToFlutter()
     }
 
     private fun setRenderableColor(entity: Int, r: Float, g: Float, b: Float, a: Float) {
@@ -369,7 +415,8 @@ class ModelView : LinearLayout {
                     resetRenderableColor(entity)
                     selectedEntities.remove(entity)
                 } else {
-                    val color = selectionColor ?: floatArrayOf(0.0f, 1.0f, 0.0f, 1.0f)
+                    val entityName = modelViewer.asset?.getName(entity)
+                    val color = getEntityColor(entityName)
                     setRenderableColor(entity, color[0], color[1], color[2], color[3])
                     selectedEntities.add(entity)
                 }
