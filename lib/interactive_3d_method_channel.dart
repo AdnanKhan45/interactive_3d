@@ -136,6 +136,38 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
   }
 
   @override
+  Future<void> loadHdrBackground({
+    String? backgroundPath,
+    String? backgroundUrl,
+  }) async {
+    Uint8List? backgroundBytes;
+
+    try {
+      if (backgroundPath != null) {
+        ByteData backgroundData = await rootBundle.load(backgroundPath);
+        backgroundBytes = backgroundData.buffer.asUint8List();
+      } else if (backgroundUrl != null) {
+        final response = await http.get(Uri.parse(backgroundUrl));
+        if (response.statusCode == 200) {
+          backgroundBytes = response.bodyBytes;
+        } else {
+          debugPrint('Failed to load HDR/EXR from $backgroundUrl: ${response.statusCode}');
+          throw Exception('Failed to load HDR/EXR background');
+        }
+      } else {
+        throw ArgumentError('Must provide either backgroundPath or backgroundUrl');
+      }
+    } catch (e) {
+      debugPrint('Error loading HDR/EXR background: $e');
+      throw Exception('Failed to load HDR/EXR background: $e');
+    }
+
+    await _methodChannel.invokeMethod('loadHdrBackground', {
+      'backgroundBytes': backgroundBytes,
+    });
+  }
+
+  @override
   Future<void> unselectEntities({List<int>? entityIds}) async {
     await _methodChannel.invokeMethod('unselectEntities', {
       'entityIds': entityIds?.map((id) => id.toInt()).toList(),

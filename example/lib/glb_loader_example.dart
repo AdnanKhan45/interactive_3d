@@ -32,6 +32,7 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
                 modelPath: 'assets/models/Tooth-3.glb',
                 iblPath: 'assets/models/giuseppe_bridge_4k_ibl.ktx',
                 skyboxPath: 'assets/models/giuseppe_bridge_4k_skybox.ktx',
+                    iOSBackgroundEnvPath: 'assets/models/san_giuseppe_bridge_4k.hdr',
                 preselectedEntities: [
                   "Teeth_Lower_1",
                   "Teeth_Lower_2",
