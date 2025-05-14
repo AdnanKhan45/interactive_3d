@@ -102,6 +102,30 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
                 self?.setCameraZoomLevel(zoomLevel: Float(zoomLevel))
                 result(nil)
             }
+            
+        case "loadHdrBackground":
+            guard let args = call.arguments as? [String: Any],
+                  let backgroundBytes = (args["backgroundBytes"] as? FlutterStandardTypedData)?.data else {
+                result(FlutterError(
+                    code: "INVALID_ARGUMENT",
+                    message: "backgroundBytes is required or invalid",
+                    details: nil
+                ))
+                return
+            }
+
+            DispatchQueue.main.async { [weak self] in
+                do {
+                    try self?.loadHdrBackgroundFromBytes(backgroundBytes)
+                    result(nil)
+                } catch {
+                    result(FlutterError(
+                        code: "LOAD_ERROR",
+                        message: "Failed to load HDR/EXR background: \(error.localizedDescription)",
+                        details: error
+                    ))
+                }
+            }
 
         case "unselectEntities":
             let entityIds = call.arguments as? [Int]
@@ -173,6 +197,11 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             box.materials = [material]
             let boxNode = SCNNode(geometry: box)
             boxNode.position = SCNVector3(0, 0, 0)
+            material.diffuse.contentsTransform = SCNMatrix4MakeScale(1, 1, 1)
+            material.normal.mipFilter = .linear
+            material.normal.intensity = 1.0
+            
+            
             scene.rootNode.addChildNode(boxNode)
         }
 
@@ -425,5 +454,104 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
         for child in node.childNodes {
             printSceneHierarchy(child, level: level + 1)
         }
+    }
+    
+    private func loadHdrBackgroundFromBytes(_ backgroundBytes: Data) throws {
+        // Write the bytes to a temporary file
+        let tempDir = NSTemporaryDirectory()
+        let tempFilePath = tempDir.appending("background.hdr") // Use .hdr or .exr based on input
+        try backgroundBytes.write(to: URL(fileURLWithPath: tempFilePath))
+        defer { try? FileManager.default.removeItem(atPath: tempFilePath) }
+
+        // Load the HDR/EXR image
+        guard let image = UIImage(contentsOfFile: tempFilePath) else {
+            throw NSError(
+                domain: "Interactive3DPlugin",
+                code: -3,
+                userInfo: [NSLocalizedDescriptionKey: "Failed to load HDR/EXR image"]
+            )
+        }
+
+        // Maximum texture size supported by most iOS devices (Metal)
+        let maxTextureSize: CGFloat = 8192
+
+        // Check if the image exceeds the maximum texture size
+        let imageSize = image.size
+        var targetSize = imageSize
+        if imageSize.width > maxTextureSize || imageSize.height > maxTextureSize {
+            let aspectRatio = imageSize.width / imageSize.height
+            if imageSize.width > imageSize.height {
+                targetSize = CGSize(width: maxTextureSize, height: maxTextureSize / aspectRatio)
+            } else {
+                targetSize = CGSize(width: maxTextureSize * aspectRatio, height: maxTextureSize)
+            }
+            NSLog("Resizing HDR/EXR image from \(imageSize) to \(targetSize)")
+        }
+
+        // Resize the image if necessary
+        let resizedImage: UIImage
+        if targetSize != imageSize {
+            UIGraphicsBeginImageContextWithOptions(targetSize, false, 1.0)
+            defer { UIGraphicsEndImageContext() }
+            image.draw(in: CGRect(origin: .zero, size: targetSize))
+            guard let scaledImage = UIGraphicsGetImageFromCurrentImageContext() else {
+                throw NSError(
+                    domain: "Interactive3DPlugin",
+                    code: -4,
+                    userInfo: [NSLocalizedDescriptionKey: "Failed to resize HDR/EXR image"]
+                )
+            }
+            resizedImage = scaledImage
+        } else {
+            resizedImage = image
+        }
+
+        // Log the final image size for debugging
+        let finalSize = resizedImage.size
+        NSLog("Final HDR/EXR image size: \(finalSize)")
+
+        // Ensure the scene is initialized
+        guard let scene = scnView.scene else {
+            throw NSError(
+                domain: "Interactive3DPlugin",
+                code: -5,
+                userInfo: [NSLocalizedDescriptionKey: "Scene not initialized"]
+            )
+        }
+
+        // Apply the resized image as the scene's background (visible only)
+        scene.background.contents = resizedImage
+
+        // Use a neutral white texture for the lighting environment to avoid color tint
+        scene.lightingEnvironment.contents = UIColor.white
+        scene.lightingEnvironment.intensity = 1.0
+
+        // Remove any existing lights to avoid conflicts
+        scene.rootNode.enumerateChildNodes { (node, _) in
+            if node.light != nil {
+                node.removeFromParentNode()
+                NSLog("Removed existing light node: \(node.name ?? "Unnamed")")
+            }
+        }
+
+        // Add a neutral ambient light
+        let ambientLight = SCNNode()
+        ambientLight.light = SCNLight()
+        ambientLight.light!.type = .ambient
+        ambientLight.light!.color = UIColor.white
+        ambientLight.light!.intensity = 600 // Slightly increased for better illumination
+        scene.rootNode.addChildNode(ambientLight)
+
+        // Add a directional light for consistent model lighting
+        let directionalLight = SCNNode()
+        directionalLight.light = SCNLight()
+        directionalLight.light!.type = .directional
+        directionalLight.light!.color = UIColor.white
+        directionalLight.light!.intensity = 1000
+        directionalLight.position = SCNVector3(x: 10, y: 10, z: 10)
+        directionalLight.look(at: SCNVector3Zero)
+        scene.rootNode.addChildNode(directionalLight)
+
+        NSLog("Successfully loaded HDR/EXR background with size \(finalSize), applied neutral lighting")
     }
 }

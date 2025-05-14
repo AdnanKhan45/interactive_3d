@@ -38,6 +38,13 @@ class Interactive3d extends StatefulWidget {
   /// URL to the skybox texture file used for the 3D environment from the network.
   final String? skyboxUrl;
 
+  /// Path to the skybox texture file of type .hdr/.exr used for the 3D environment from assets.
+  final String? iOSBackgroundEnvPath;
+
+  /// URL to the skybox texture file of type .hdr/.exr used for the 3D environment from the network.
+  final String? iOSBackgroundEnvUrl;
+
+
   /// A list of additional resource file paths required for `.gltf` models (e.g., textures, binary files).
   /// Defaults to an empty list.
   final List<String> resources;
@@ -70,6 +77,8 @@ class Interactive3d extends StatefulWidget {
     this.iblUrl,
     this.skyboxPath,
     this.skyboxUrl,
+    this.iOSBackgroundEnvPath,
+    this.iOSBackgroundEnvUrl,
     this.onSelectionChanged,
     this.resources = const [],
     this.preselectedEntities,
@@ -175,6 +184,11 @@ class Interactive3dState extends State<Interactive3d> {
         iblUrl: widget.iblUrl,
         skyboxPath: widget.skyboxPath,
         skyboxUrl: widget.skyboxUrl,
+      );
+    } else {
+      await _platform!.loadHdrBackground(
+        backgroundPath: widget.iOSBackgroundEnvPath,
+        backgroundUrl: widget.iOSBackgroundEnvUrl,
       );
     }
 

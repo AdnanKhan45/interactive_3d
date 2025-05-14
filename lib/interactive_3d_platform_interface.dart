@@ -37,6 +37,12 @@ abstract class Interactive3dPlatform extends PlatformInterface {
   /// Method to unselect entities in the 3D model.
   Future<void> unselectEntities({List<int>? entityIds});
 
+  // Load HDR or EXR background for iOS
+  Future<void> loadHdrBackground({
+    String? backgroundPath,
+    String? backgroundUrl,
+  });
+
   /// Stream to receive selection changes.
   Stream<List<EntityData>> get selectionStream;
 }

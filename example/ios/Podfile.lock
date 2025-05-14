@@ -3,7 +3,7 @@ PODS:
   - GLTFSceneKit (0.3.0)
   - integration_test (0.0.1):
     - Flutter
-  - interactive_3d (0.0.2):
+  - interactive_3d (1.2.0):
     - Flutter
     - GLTFSceneKit (~> 0.3.0)
 
@@ -29,7 +29,7 @@ SPEC CHECKSUMS:
   Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
   GLTFSceneKit: d1b437c514ba2aed5555afb0fddd64e030612d57
   integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
-  interactive_3d: 7d691b9bc1ecb9bfd4b7df47f4e55bb19b30f581
+  interactive_3d: da2ced80518ad9dc4f2ccc07607fdc94ab868f0e
 
 PODFILE CHECKSUM: 984ae68da4551b355f9df642e1bf4b67d85f5215
 

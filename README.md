@@ -2,7 +2,7 @@
 
 ![Logo](assets/FlutterFilament_logo_v2.png)
 
-`interactive_3d` is an open-source Flutter plugin for rendering interactive 3d models `.glb` or `.gltf` using the Filament Engine. Currently supported only on Android. The code is available open-source with MIT license, your contribution to this would highly be appreciated.
+`interactive_3d` is an open-source Flutter plugin for rendering interactive 3d models `.glb` or `.gltf` using the Filament Engine on Android & SceneKit on iOS. The code is available open-source with MIT license, your contribution to this would highly be appreciated.
 
 > Mainly inspired having healthcare problem in mind, to have a 3D model from where users can interact with the model and describe their complaints about any part of the body, specific or full human body. I want to take it to the next level with the help of **YOU** 🫵 and the great **Flutter community** 💙.
 
@@ -65,6 +65,8 @@ Interactive3d(
                 // ibl and skybox are background envs
                 iblPath: 'assets/models/venetian_crossroads_2k_ibl.ktx',
                 skyboxPath: 'assets/models/venetian_crossroads_2k_skybox.ktx',
+                // Load iOS background env from path
+                iOSBackgroundEnvPath: 'assets/models/san_giuseppe_bridge_4k.hdr',
                 // Preselection based on entity names
                 preselectedEntities: ["Teeth_1", "Teeth_2", "Lower_Jaw"],
                 // Dynamic selected color (RGBA) default is Green
@@ -78,7 +80,8 @@ Interactive3d(
                    name: "Hard_Plate_L",
                    color: [0.41, 0.35, 0.51, 1.0],
                    ...
-                ),
+                 ),
+                ]
                 resources: [
                   'scene.bin',
                   'textures/mouth_baseColor.png',
@@ -104,6 +107,8 @@ Interactive3d(
                 // ibl and skybox are background envs
                 iblPath: 'assets/models/venetian_crossroads_2k_ibl.ktx',
                 skyboxPath: 'assets/models/venetian_crossroads_2k_skybox.ktx',
+                // Load iOS background env from path
+                iOSBackgroundEnvPath: 'assets/models/san_giuseppe_bridge_4k.hdr',
                 // Preselection based on entity names
                 preselectedEntities: ["Chamber", "Artery"],
                 // Dynamic selected color (RGBA) default is Green
@@ -116,7 +121,8 @@ Interactive3d(
                    name: "Hard_Plate_L",
                    color: [0.41, 0.35, 0.51, 1.0],
                    ...
-                ),
+                 ),
+                ]
                 onSelectionChanged: (selectedEntities) {
                   setState(() {
                     _selectedEntities = selectedEntities;
@@ -133,6 +139,8 @@ Interactive3d(
                 // ibl and skybox are background envs
                 iblUrl: 'https://example/your_ibl.ktx',
                 skyboxUrl: 'https://example/your_skybox.ktx',
+                // Load iOS background env from path
+                iOSBackgroundEnvPath: 'assets/models/san_giuseppe_bridge_4k.hdr',
                 // Preselection based on entity names
                 preselectedEntities: ["Chamber", "Artery"],
                 // Dynamic selected color (RGBA) default is Green
@@ -145,7 +153,8 @@ Interactive3d(
                    name: "Hard_Plate_L",
                    color: [0.41, 0.35, 0.51, 1.0],
                    ...
-                ),
+                 ),
+                ]
                 onSelectionChanged: (selectedEntities) {
                   setState(() {
                     _selectedEntities = selectedEntities;

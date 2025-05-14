@@ -1,7 +1,7 @@
 import Flutter
 import UIKit
 
-class Interactive3DViewFactory: NSObject, FlutterPlatformViewFactory {
+class Interactive3dViewFactory: NSObject, FlutterPlatformViewFactory {
     private let messenger: FlutterBinaryMessenger
 
     init(messenger: FlutterBinaryMessenger) {
