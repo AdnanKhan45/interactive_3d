@@ -197,6 +197,11 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             box.materials = [material]
             let boxNode = SCNNode(geometry: box)
             boxNode.position = SCNVector3(0, 0, 0)
+            material.diffuse.contentsTransform = SCNMatrix4MakeScale(1, 1, 1)
+            material.normal.mipFilter = .linear
+            material.normal.intensity = 1.0
+            
+            
             scene.rootNode.addChildNode(boxNode)
         }
 
