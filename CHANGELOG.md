@@ -1,3 +1,11 @@
+## 1.2.1
+
+* 5th release of `interactive_3d`.
+- Fix:
+  - iOS Plugin name conflict issue fix.
+- Feature:
+  - Load background environment for iOS.
+
 ## 1.2.0
 
 * 4th release of `interactive_3d`.
