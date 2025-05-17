@@ -12,6 +12,7 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
     private var originalMaterials: [SCNNode: SCNMaterial] = [:]
     private var cameraNode: SCNNode?
     private var pendingPreselectedEntities: [String]?
+    private var nodeOpacities: [SCNNode: CGFloat] = [:]
     private var patchColors: [[String: Any]]?
     private var selectionColor: [Double]?
 
@@ -133,6 +134,25 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
                 self?.unselectEntities(entityIds: entityIds)
                 result(nil)
             }
+            
+        case "setPartGroupVisibility":
+             guard let args = call.arguments as? [String: Any],
+                   let group = args["group"] as? [String: Any],
+                   let visibility = args["visibility"] as? [String: Bool],
+                   let title = group["title"] as? String,
+                   let isVisible = visibility[title] else {
+                 result(FlutterError(
+                     code: "INVALID_ARGUMENT",
+                     message: "Invalid group or visibility data",
+                     details: nil
+                 ))
+                 return
+             }
+
+             DispatchQueue.main.async { [weak self] in
+                 self?.setPartGroupVisibility(group: group, isVisible: isVisible)
+                 result(nil)
+             }
 
         default:
             result(FlutterMethodNotImplemented)
@@ -553,5 +573,55 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
         scene.rootNode.addChildNode(directionalLight)
 
         NSLog("Successfully loaded HDR/EXR background with size \(finalSize), applied neutral lighting")
+    }
+    
+    private func setPartGroupVisibility(group: [String: Any], isVisible: Bool) {
+        guard let scene = scnView.scene else {
+            NSLog("No scene available to set visibility")
+            return
+        }
+
+        guard let title = group["title"] as? String,
+              let names = group["names"] as? [String] else {
+            NSLog("Invalid group data for title: \(group["title"] ?? "Unknown")")
+            return
+        }
+
+        let opacity: Float = isVisible ? 1.0 : 0.0
+        NSLog("Setting visibility for group '\(title)' to \(isVisible ? "visible" : "invisible") (opacity: \(opacity))")
+
+        var updatedNodes = 0
+        scene.rootNode.enumerateChildNodes { (node, _) in
+            if let nodeName = node.name, names.contains(nodeName) {
+                // Update the named node
+                node.opacity = CGFloat(opacity)
+                node.isHidden = !isVisible // Ensure invisibility
+                self.nodeOpacities[node] = CGFloat(opacity) // Track opacity
+                if node.geometry != nil {
+                    updatedNodes += 1
+                    NSLog("Set opacity to \(opacity) and hidden=\(!isVisible) for geometry node: \(nodeName)")
+                } else {
+                    NSLog("Set opacity to \(opacity) and hidden=\(!isVisible) for non-geometry node: \(nodeName)")
+                }
+                // Update all child geometry nodes
+                node.enumerateChildNodes { (child, _) in
+                    if child.geometry != nil {
+                        child.opacity = CGFloat(opacity)
+                        child.isHidden = !isVisible
+                        self.nodeOpacities[child] = CGFloat(opacity)
+                        updatedNodes += 1
+                        NSLog("Set opacity to \(opacity) and hidden=\(!isVisible) for child geometry node: \(child.name ?? "Unnamed")")
+                    }
+                }
+            }
+        }
+
+        if updatedNodes == 0 {
+            NSLog("No nodes updated for group '\(title)'. Expected names: \(names.joined(separator: ", "))")
+        } else {
+            NSLog("Updated \(updatedNodes) nodes for group '\(title)'")
+        }
+
+        scnView.setNeedsDisplay()
     }
 }

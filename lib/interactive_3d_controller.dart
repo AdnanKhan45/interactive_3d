@@ -34,4 +34,11 @@ class Interactive3dController {
     }
     await _state!.setZoom(zoomLevel);
   }
+
+  Future<void> updatePartGroupConfig({required bool isVisible, required ModelPartGroup group}) async {
+    if (_state == null) {
+      throw StateError('Controller is not attached to a widget');
+    }
+    await _state!.updatePartGroupConfig(isVisible: isVisible, group: group);
+  }
 }

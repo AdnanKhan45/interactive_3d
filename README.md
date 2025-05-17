@@ -2,9 +2,9 @@
 
 ![Logo](assets/FlutterFilament_logo_v2.png)
 
-`interactive_3d` is an open-source Flutter plugin for rendering interactive 3d models `.glb` or `.gltf` using the Filament Engine on Android & SceneKit on iOS. The code is available open-source with MIT license, your contribution to this would highly be appreciated.
+`interactive_3d` is an open-source Flutter plugin for rendering interactive 3d models `.glb` or `.gltf` using the Filament Engine on Android & SceneKit on iOS. The code is available open-source with MIT license.
 
-> Mainly inspired having healthcare problem in mind, to have a 3D model from where users can interact with the model and describe their complaints about any part of the body, specific or full human body. I want to take it to the next level with the help of **YOU** 🫵 and the great **Flutter community** 💙.
+> Mainly inspired having healthcare problem in mind, to have a 3D model from where users can interact with the model and describe their complaints about any part of the body, specific or full human body.
 
 ## Features
 
@@ -19,6 +19,8 @@
 ✅ Update default zoom.
 
 ✅ Extract data from interactions and use it in your flutter app.
+
+✅ Update Visibility of different parts of Model.
 
 ## Generate IBL & Skybox
 
@@ -39,13 +41,7 @@ cmgen --format=ktx --deploy=san_guiseppe ~/Downloads/san_giuseppe_bridge_4k.hdr
  <img src="https://media.giphy.com/media/nK7JDBH330RSaqi5y6/giphy.gif" width=200 />  
  <img src="https://media.giphy.com/media/YTh9FdZIaIqZd6KXR6/giphy.gif" width=200 />  
   <img src="https://media.giphy.com/media/aGAkEIzub789i3JVp1/giphy.gif" width=200 />  
-</p>  
-
-## Future features
-I'm actively working on this plugin and currently focusing mainly on Android. Below mentioned features will be added, if you have something great in mind and want to contribute, MOST WELCOME 🤗
-
-🚀 Add horizontal scroll indicators to hide or show specific parts of the model.
-
+</p>
 
 ## Installation
 
@@ -79,8 +75,8 @@ Interactive3d(
                  PatchColor(
                    name: "Hard_Plate_L",
                    color: [0.41, 0.35, 0.51, 1.0],
-                   ...
                  ),
+                ...
                 ]
                 resources: [
                   'scene.bin',
@@ -120,8 +116,8 @@ Interactive3d(
                  PatchColor(
                    name: "Hard_Plate_L",
                    color: [0.41, 0.35, 0.51, 1.0],
-                   ...
                  ),
+                ...
                 ]
                 onSelectionChanged: (selectedEntities) {
                   setState(() {
@@ -152,8 +148,8 @@ Interactive3d(
                  PatchColor(
                    name: "Hard_Plate_L",
                    color: [0.41, 0.35, 0.51, 1.0],
-                   ...
                  ),
+                ...
                 ]
                 onSelectionChanged: (selectedEntities) {
                   setState(() {
@@ -167,7 +163,7 @@ For more information : visit example project.
 
 ## Must read
 
-If you're willing to contribute feel free to create issue and rasie a PR. Make sure you inform me through my [LinkedIn DM](https://www.linkedin.com/in/muhammad-adnan-developer/)  for the issues you create in both cases either or not if you want to contribute.
+If you're willing to contribute feel free to create issue and raise a PR. Make sure you inform me through my [LinkedIn DM](https://www.linkedin.com/in/muhammad-adnan-developer/)  for the issues you create in both cases either or not if you want to contribute.
 
 This plugin will be improved more along the time, your contribution will be very invaluable.
 

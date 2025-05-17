@@ -10,13 +10,47 @@ class GlbLoaderExample extends StatefulWidget {
   GlbLoaderExampleState createState() => GlbLoaderExampleState();
 }
 
-// Updated camera zoomLevel: 2.5, position: SCNVector3(x: 0.0, y: 0.0, z: 0.64142126)
-// Updated camera zoomLevel: 2.5, position: SCNVector3(x: 0.0, y: 0.0, z: 0.5)
-
 class GlbLoaderExampleState extends State<GlbLoaderExample> {
   List<EntityData> _selectedEntities = [];
 
+  bool _toothVisibiliy = true;
+
   final Interactive3dController _controller = Interactive3dController();
+
+  List<String> toothGroup = [
+    "Teeth_Lower_1",
+    "Teeth_Lower_2",
+    "Teeth_Lower_3",
+    "Teeth_Lower_4",
+    "Teeth_Lower_5",
+    "Teeth_Lower_6",
+    "Teeth_Lower_7",
+    "Teeth_Lower_8",
+    "Teeth_Lower_9",
+    "Teeth_Lower_10",
+    "Teeth_Lower_11",
+    "Teeth_Lower_12",
+    "Teeth_Lower_13",
+    "Teeth_Lower_14",
+    "Teeth_Lower_15",
+    "Teeth_Lower_16",
+    "Teeth_Upper_1",
+    "Teeth_Upper_2",
+    "Teeth_Upper_3",
+    "Teeth_Upper_4",
+    "Teeth_Upper_5",
+    "Teeth_Upper_6",
+    "Teeth_Upper_7",
+    "Teeth_Upper_8",
+    "Teeth_Upper_9",
+    "Teeth_Upper_10",
+    "Teeth_Upper_11",
+    "Teeth_Upper_12",
+    "Teeth_Upper_13",
+    "Teeth_Upper_14",
+    "Teeth_Upper_15",
+    "Teeth_Upper_16",
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -28,11 +62,12 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
             children: [
               Expanded(
                   child: Interactive3d(
-                    controller: _controller,
+                controller: _controller,
                 modelPath: 'assets/models/Tooth-3.glb',
                 iblPath: 'assets/models/giuseppe_bridge_4k_ibl.ktx',
                 skyboxPath: 'assets/models/giuseppe_bridge_4k_skybox.ktx',
-                    iOSBackgroundEnvPath: 'assets/models/san_giuseppe_bridge_4k.hdr',
+                iOSBackgroundEnvPath:
+                    'assets/models/san_giuseppe_bridge_4k.hdr',
                 preselectedEntities: [
                   "Teeth_Lower_1",
                   "Teeth_Lower_2",
@@ -63,7 +98,6 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
                     name: "Soft_Plate_L",
                     color: [0.41, 0.35, 0.51, 1.0],
                   ),
-
                   PatchColor(
                     name: "Lower_Jaw_L",
                     color: [0.60, 0.43, 0.28, 1.0],
@@ -71,14 +105,15 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
                   PatchColor(
                     name: "Lower_Jaw_R",
                     color: [0.60, 0.43, 0.28, 1.0],
-                  ), PatchColor(
+                  ),
+                  PatchColor(
                     name: "Upper_Jaw_L",
                     color: [0.60, 0.43, 0.28, 1.0],
-                  ), PatchColor(
+                  ),
+                  PatchColor(
                     name: "Upper_Jaw_R",
                     color: [0.60, 0.43, 0.28, 1.0],
                   ),
-
                   PatchColor(
                     name: "Tounge_Lower_L",
                     color: [0.58, 0.50, 0.43, 1.0],
@@ -95,7 +130,6 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
                     name: "Tounge_Upper_R",
                     color: [0.58, 0.50, 0.43, 1.0],
                   ),
-
                   PatchColor(
                     name: "Neck",
                     color: [0.58, 0.50, 0.43, 1.0],
@@ -124,16 +158,41 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
               ),
             ],
           ),
-
           if (_selectedEntities.isNotEmpty)
             Align(
               alignment: Alignment.topCenter,
               child: Padding(
                 padding:
-                const EdgeInsets.symmetric(horizontal: 20.0, vertical: 20),
-                child: ElevatedButton(onPressed: _clearSelections, child: Text("Clear"),),
+                    const EdgeInsets.symmetric(horizontal: 20.0, vertical: 20),
+                child: ElevatedButton(
+                  onPressed: _clearSelections,
+                  child: Text("Clear"),
+                ),
               ),
             ),
+          Align(
+            alignment: Alignment.topLeft,
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20.0, vertical: 20),
+              child: Switch(
+                value: _toothVisibiliy,
+                onChanged: (visibility) {
+                  setState(
+                    () {
+
+                      _toothVisibiliy = visibility;
+
+                      _controller.updatePartGroupConfig(
+                          isVisible: _toothVisibiliy,
+                          group: ModelPartGroup(
+                              title: "Teeth", names: toothGroup));
+                    },
+                  );
+                },
+              ),
+            ),
+          )
         ],
       ),
     );

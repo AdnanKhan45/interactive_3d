@@ -175,6 +175,19 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
   }
 
   @override
+  Future<void> updatePartGroupConfig({required bool isVisible, required ModelPartGroup group}) async {
+    try {
+      await _methodChannel.invokeMethod('setPartGroupVisibility', {
+        'group': group.toMap(),
+        'visibility': {group.title: isVisible},
+      });
+      debugPrint('Set visibility for ${group.title} to $isVisible');
+    } catch (e) {
+      debugPrint('Error setting visibility for ${group.title}: $e');
+    }
+  }
+
+  @override
   Future<void> setCameraZoomLevel(double zoom) async {
     await _methodChannel.invokeMethod('setZoomLevel', {'zoom': zoom});
   }

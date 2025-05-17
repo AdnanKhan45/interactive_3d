@@ -51,6 +51,7 @@ class ModelView : LinearLayout {
     private var modelLoaded = false
     private var selectionColor: FloatArray? = null // Store RGBA as [r, g, b, a]
     private var patchColors: List<Map<String, Any>>? = null // Store entity-specific colors
+    private val entityVisibilities = mutableMapOf<Int, Boolean>() // Track entity visibility
 
     /**
      * Listener interface for selection changes in the 3D model.
@@ -119,6 +120,59 @@ class ModelView : LinearLayout {
             }
         })
     }
+
+
+    /**
+     * Sets the visibility of a group of model parts.
+     * @param group A map containing 'title' (String) and 'names' (List<String>) of entities.
+     * @param isVisible Whether the group’s parts should be visible (true) or invisible (false).
+     */
+    fun setPartGroupVisibility(group: Map<String, Any>, isVisible: Boolean) {
+        val title = group["title"] as? String ?: run {
+            Log.e(TAG, "Invalid group data: missing title")
+            return
+        }
+        val names = group["names"] as? List<String> ?: run {
+            Log.e(TAG, "Invalid group data: missing names for title $title")
+            return
+        }
+
+        Log.d(TAG, "Setting visibility for group '$title' to ${if (isVisible) "visible" else "invisible"}")
+
+        var updatedEntities = 0
+        modelViewer.asset?.getEntities()?.forEach { entity ->
+            val entityName = modelViewer.asset?.getName(entity)
+            if (entityName != null && names.contains(entityName)) {
+                val rcm = modelViewer.engine.renderableManager
+                if (rcm.hasComponent(entity)) {
+                    if (isVisible) {
+                        modelViewer.scene.addEntity(entity)
+                    } else {
+                        modelViewer.scene.removeEntity(entity)
+                    }
+                    entityVisibilities[entity] = isVisible
+                    updatedEntities++
+                    Log.d(TAG, "Set visibility to $isVisible for entity: $entityName")
+                } else {
+                    Log.w(TAG, "Entity $entityName has no renderable component")
+                }
+            }
+        }
+
+        if (updatedEntities == 0) {
+            Log.w(TAG, "No entities updated for group '$title'. Expected names: ${names.joinToString(", ")}")
+        } else {
+            Log.d(TAG, "Updated $updatedEntities entities for group '$title'")
+        }
+
+        // Ensure selections respect visibility
+        if (!isVisible) {
+            unselectEntities(names.mapNotNull { name ->
+                modelViewer.asset?.getEntities()?.find { modelViewer.asset?.getName(it) == name }?.toLong()
+            })
+        }
+    }
+
 
     /**
      * Sets the zoom level for the camera.

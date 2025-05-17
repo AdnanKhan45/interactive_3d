@@ -34,6 +34,9 @@ abstract class Interactive3dPlatform extends PlatformInterface {
   /// Method to set the camera position.
   Future<void> setCameraZoomLevel(double zoom);
 
+  /// Method to set the camera position.
+  Future<void> updatePartGroupConfig({required bool isVisible, required ModelPartGroup group});
+
   /// Method to unselect entities in the 3D model.
   Future<void> unselectEntities({List<int>? entityIds});
 

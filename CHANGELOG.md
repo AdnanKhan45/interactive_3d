@@ -1,3 +1,9 @@
+## 1.2.2
+
+* 6th release of `interactive_3d`.
+- Feature:
+  - Control Visibility of different parts of model using Interactive3dController.
+
 ## 1.2.1
 
 * 5th release of `interactive_3d`.
@@ -16,7 +22,7 @@
 
 ## 1.0.1
 
-* 3nd release of `interactive_3d`.
+* 3rd release of `interactive_3d`.
 - Features:
   - Preselection based on entity names.
   - Dynamic selected color.

@@ -18,6 +18,25 @@ class PatchColor {
   PatchColor({required this.name, required this.color});
 }
 
+/// Represents a group of model parts whose visibility can be toggled together.
+class ModelPartGroup {
+  /// The display title for the group, shown in the UI.
+  final String title;
+
+  /// The list of node names (e.g., 'Tooth_1', 'Gum_1') in the 3D model.
+  final List<String> names;
+
+  ModelPartGroup({required this.title, required this.names});
+
+  /// Converts the group to a map for method channel communication.
+  Map<String, dynamic> toMap() {
+    return {
+      'title': title,
+      'names': names,
+    };
+  }
+}
+
 /// A widget for rendering and interacting with 3D models using a native platform view.
 class Interactive3d extends StatefulWidget {
   /// Path to the 3D model file (e.g., `.glb` or `.gltf`) to be loaded from assets.
@@ -200,6 +219,11 @@ class Interactive3dState extends State<Interactive3d> {
   // Set the default zoom level if provided.
   Future<void> setZoom(double? level) async {
     await _platform!.setCameraZoomLevel(level ?? widget.defaultZoom!);
+  }
+
+  // Set the model part group if provided.
+  Future<void> updatePartGroupConfig({required bool isVisible, required ModelPartGroup group}) async {
+    await _platform!.updatePartGroupConfig(isVisible: isVisible, group: group);
   }
 
   /// Loads additional resources required for `.gltf` models.

@@ -120,6 +120,21 @@ class Interactive3dPlatformView(
                     result.error("INVALID_ARGUMENT", "Zoom value is null", null)
                 }
             }
+            "setPartGroupVisibility" -> {
+                val group = call.argument<Map<String, Any>>("group")
+                val visibility = call.argument<Map<String, Boolean>>("visibility")
+                val title = group?.get("title") as? String
+                val isVisible = visibility?.get(title) as? Boolean
+
+                if (group != null && title != null && isVisible != null) {
+                    mainHandler.post {
+                        customView.setPartGroupVisibility(group, isVisible)
+                        result.success(null)
+                    }
+                } else {
+                    result.error("INVALID_ARGUMENT", "Invalid group or visibility data", null)
+                }
+            }
             "unselectEntities" -> {
                 val entityIds = call.argument<List<Long>?>("entityIds")
                 mainHandler.post {
