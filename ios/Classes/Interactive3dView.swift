@@ -25,7 +25,7 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
         scnView = SCNView(frame: frame.isEmpty ? UIScreen.main.bounds : frame)
         scnView.autoenablesDefaultLighting = false
         scnView.allowsCameraControl = true
-        scnView.showsStatistics = true
+        scnView.showsStatistics = false
         scnView.backgroundColor = UIColor(red: 0.9, green: 0.9, blue: 0.95, alpha: 1.0)
         scnView.cameraControlConfiguration.allowsTranslation = false
 
