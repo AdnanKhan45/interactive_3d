@@ -21,6 +21,8 @@ abstract class Interactive3dPlatform extends PlatformInterface {
     List<String>? preselectedEntities,
     List<double>? selectionColor,
     List<PatchColor>? patchColors, // Add patchColors
+    bool enableCache = false,
+    List<double>? cacheColor,
   });
 
   /// Method to load the environment from assets or network URLs.
@@ -40,6 +42,9 @@ abstract class Interactive3dPlatform extends PlatformInterface {
   /// Method to unselect entities in the 3D model.
   Future<void> unselectEntities({List<int>? entityIds});
 
+  /// Method to clear all selected entities in the 3D model.
+  Future<void> clearCache();
+
   // Load HDR or EXR background for iOS
   Future<void> loadHdrBackground({
     String? backgroundPath,
@@ -48,4 +53,8 @@ abstract class Interactive3dPlatform extends PlatformInterface {
 
   /// Stream to receive selection changes.
   Stream<List<EntityData>> get selectionStream;
+
+  /// Stream to receive cached selection changes.
+  Stream<List<String>> get cacheSelectionStream;
+
 }

@@ -4,6 +4,9 @@ import SceneKit
 import GLTFSceneKit
 
 class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHandler {
+    
+    // 3D Model Core Related
+    
     private let scnView: SCNView
     private let methodChannel: FlutterMethodChannel
     private let eventChannel: FlutterEventChannel
@@ -15,6 +18,13 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
     private var nodeOpacities: [SCNNode: CGFloat] = [:]
     private var patchColors: [[String: Any]]?
     private var selectionColor: [Double]?
+    
+    // Cache Related
+    
+    private var cacheManager: Interactive3DCacheManager?
+    private var enableCache: Bool = false
+    private var cacheColor: UIColor = UIColor(red: 0.8, green: 0.8, blue: 0.2, alpha: 0.6) // default cache color
+    private var modelCacheKey: String = ""
 
     init(
         frame: CGRect,
@@ -71,6 +81,31 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             let preselectedEntities = args["preselectedEntities"] as? [String]
             let patchColors = args["patchColors"] as? [[String: Any]]
             let selectionColor = args["selectionColor"] as? [Double]
+            
+            // NEW: Cache params from Dart
+            enableCache = (args["enableCache"] as? Bool) ?? false
+            if let cacheColorArray = args["cacheColor"] as? [Double], cacheColorArray.count == 4 {
+                cacheColor = UIColor(
+                    red: CGFloat(cacheColorArray[0]),
+                    green: CGFloat(cacheColorArray[1]),
+                    blue: CGFloat(cacheColorArray[2]),
+                    alpha: CGFloat(cacheColorArray[3])
+                )
+            }
+            // Use model name/path/url as a key (fallback to uuid if missing)
+            if let modelName = args["name"] as? String {
+                modelCacheKey = modelName
+            } else {
+                modelCacheKey = UUID().uuidString
+            }
+            if enableCache {
+                cacheManager = Interactive3DCacheManager(modelKey: modelCacheKey, cacheColor: cacheColor)
+                cacheManager?.onCacheChanged = { [weak self] cached in
+                    self?.sendCacheSelectionUpdate()
+                }
+            } else {
+                cacheManager = nil
+            }
 
             DispatchQueue.main.async { [weak self] in
                 do {
@@ -153,11 +188,36 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
                  self?.setPartGroupVisibility(group: group, isVisible: isVisible)
                  result(nil)
              }
+        case "clearCache":
+            if enableCache, let cacheMgr = cacheManager {
+                let entitiesToClear = Array(cacheMgr.cachedEntities)
+                cacheMgr.clearCache()
+                for cachedName in entitiesToClear {
+                    scnView.scene?.rootNode.enumerateChildNodes { (node, _) in
+                        if let nodeName = node.name, nodeName == cachedName {
+                            if let geometryNode = findGeometryNode(in: node) {
+                                resetNodeColor(geometryNode)
+                                // If the node is still selected, re-apply selection highlight!
+                                if selectedNodes.contains(node) {
+                                    applyHighlight(to: geometryNode, forNodeName: nodeName)
+                                }
+                            }
+                        }
+                    }
+                }
+                sendCacheSelectionUpdate()
+                result(nil)
+            } else {
+                result(FlutterError(code: "CACHE_DISABLED", message: "Cache not enabled", details: nil))
+            }
+
+
 
         default:
             result(FlutterMethodNotImplemented)
         }
     }
+    
 
     private func loadModel(modelBytes: Data) throws {
         NSLog("Received modelBytes with size: \(modelBytes.count) bytes")
@@ -245,6 +305,22 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
         }
 
         scnView.scene = scene
+        
+        // Apply Cache
+    
+        if enableCache, let cacheMgr = cacheManager {
+            for cachedName in cacheMgr.cachedEntities {
+                scnView.scene?.rootNode.enumerateChildNodes { (node, _) in
+                    if let nodeName = node.name, nodeName == cachedName {
+                        if let geometryNode = findGeometryNode(in: node) {
+                            applyCacheHighlight(to: geometryNode, forNodeName: nodeName)
+                        }
+                    }
+                }
+            }
+            // Optionally: emit current cache as event
+            sendCacheSelectionUpdate()
+        }
 
         applyPreselectedEntities()
 
@@ -253,6 +329,17 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
         NSLog("Scene node count: \(scene.rootNode.childNodes.count)")
         NSLog("SCNView bounds: \(scnView.bounds)")
     }
+    
+    private func applyCacheHighlight(to node: SCNNode, forNodeName nodeName: String?) {
+        guard let geometry = node.geometry, let material = geometry.firstMaterial else { return }
+        if originalMaterials[node] == nil {
+            originalMaterials[node] = material.copy() as? SCNMaterial
+        }
+        material.diffuse.contents = cacheColor
+        material.emission.contents = cacheColor.withAlphaComponent(0.2)
+        material.multiply.contents = cacheColor
+    }
+
 
     private func applyPreselectedEntities() {
         guard let preselectedEntities = pendingPreselectedEntities, !preselectedEntities.isEmpty else {
@@ -343,6 +430,19 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
         ]
         eventSink(event)
     }
+    
+    private func sendCacheSelectionUpdate() {
+        guard let eventSink = eventSink, enableCache, let cacheMgr = cacheManager else { return }
+        let cachedEntities = cacheMgr.cachedEntities.map { name in
+            ["name": name]
+        }
+        let event: [String: Any] = [
+            "event": "cacheSelectionChanged",
+            "cachedEntities": cachedEntities
+        ]
+        eventSink(event)
+    }
+
 
     @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
         let location = gesture.location(in: scnView)
@@ -371,6 +471,24 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             NSLog("No geometry node found for: \(nameNode.name ?? "Unnamed")")
             return
         }
+        
+        guard let nameNode = targetNode, let nodeName = nameNode.name else { return }
+        guard let geometryNode = findGeometryNode(in: nameNode) else { return }
+        
+        // Check if in cache
+        if enableCache, let cacheMgr = cacheManager, cacheMgr.isCached(nodeName) {
+            // UX: Remove from cache (or you may want to select it and remove from cache, up to you)
+            cacheMgr.removeFromCache(nodeName)
+            resetNodeColor(geometryNode)
+            NSLog("Removed from cache: \(nodeName)")
+            sendCacheSelectionUpdate()
+            
+            selectedNodes.insert(nameNode)
+            applyHighlight(to: highlightNode, forNodeName: nameNode.name)
+            NSLog("Selected: \(nameNode.name ?? "Unnamed")")
+            sendSelectionUpdate()
+            return
+        }
 
         if selectedNodes.contains(nameNode) {
             selectedNodes.remove(nameNode)
@@ -380,6 +498,11 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             selectedNodes.insert(nameNode)
             applyHighlight(to: highlightNode, forNodeName: nameNode.name)
             NSLog("Selected: \(nameNode.name ?? "Unnamed")")
+            
+            if enableCache {
+                NSLog("Cached is \(enableCache) | Adding to cache: \(nodeName)")
+                cacheManager?.addToCache(nodeName)
+            }
         }
 
         sendSelectionUpdate()

@@ -87,6 +87,15 @@ class Interactive3d extends StatefulWidget {
   /// Controller for programmatically interacting with the 3D view.
   final Interactive3dController? controller;
 
+  /// Enables persistent caching of selected entities on the native side.
+  final bool enableCache;
+
+  /// The color used to display cached entities (RGBA 0.0–1.0).
+  final List<double>? cacheColor;
+
+  /// Callback for when the cached selection changes (persistent cache).
+  final void Function(List<String>)? onCacheSelectionChanged;
+
   /// Constructor for the `Interactive3d` widget.
   const Interactive3d({
     super.key,
@@ -105,6 +114,9 @@ class Interactive3d extends StatefulWidget {
     this.defaultZoom,
     this.patchColors,
     this.controller,
+    this.enableCache = false,
+    this.cacheColor,
+    this.onCacheSelectionChanged,
   });
 
   @override
@@ -121,6 +133,10 @@ class Interactive3dState extends State<Interactive3d> {
 
   /// Subscription to the selection stream for listening to selection changes.
   StreamSubscription<List<EntityData>>? _selectionSubscription;
+
+  /// Subscription to the selection stream for listening to cached selection changes.
+  StreamSubscription<List<String>>? _cacheSelectionSubscription;
+
 
   @override
   void initState() {
@@ -167,6 +183,10 @@ class Interactive3dState extends State<Interactive3d> {
       'skyboxPath': widget.skyboxPath,
       'skyboxUrl': widget.skyboxUrl,
       'resources': widget.resources,
+      'enableCache': widget.enableCache,
+      'cacheColor': widget.cacheColor,
+      // For cacheKey, use modelPath or modelUrl (handled natively for uniqueness)
+      'name': widget.modelPath?.split('/').last ?? widget.modelUrl?.split('/').last,
     };
   }
 
@@ -179,6 +199,12 @@ class Interactive3dState extends State<Interactive3d> {
 
     // Listen for selection changes.
     _selectionSubscription = _platform!.selectionStream.listen(_onSelectionChanged);
+
+    // Listen for cache selection changes
+    if (widget.onCacheSelectionChanged != null) {
+      _cacheSelectionSubscription =
+          (_platform as MethodChannelInteractive3d).cacheSelectionStream.listen(widget.onCacheSelectionChanged!);
+    }
 
     // Create resources if needed (for .gltf only).
     Map<String, ByteData> resources = {};
@@ -194,6 +220,8 @@ class Interactive3dState extends State<Interactive3d> {
       preselectedEntities: widget.preselectedEntities,
       selectionColor: widget.selectionColor,
       patchColors: widget.patchColors, // Pass patchColors
+      enableCache: widget.enableCache,
+      cacheColor: widget.cacheColor,
     );
 
     // Load environment.
@@ -219,6 +247,11 @@ class Interactive3dState extends State<Interactive3d> {
   // Set the default zoom level if provided.
   Future<void> setZoom(double? level) async {
     await _platform!.setCameraZoomLevel(level ?? widget.defaultZoom!);
+  }
+
+  // Set the default zoom level if provided.
+  Future<void> clearCache() async {
+    await _platform!.clearCache();
   }
 
   // Set the model part group if provided.
@@ -286,6 +319,7 @@ class Interactive3dState extends State<Interactive3d> {
   @override
   void dispose() {
     _selectionSubscription?.cancel();
+    _cacheSelectionSubscription?.cancel();
     widget.controller?.detach();
     super.dispose();
   }

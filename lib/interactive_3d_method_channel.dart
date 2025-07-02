@@ -18,9 +18,14 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
 
   final StreamController<List<EntityData>> _selectionController =
   StreamController.broadcast();
+  final StreamController<List<String>> _cacheSelectionController =
+  StreamController.broadcast();
+
 
   @override
   Stream<List<EntityData>> get selectionStream => _selectionController.stream;
+  @override
+  Stream<List<String>> get cacheSelectionStream => _cacheSelectionController.stream;
 
   void _onEvent(dynamic event) {
     final map = event as Map<dynamic, dynamic>;
@@ -31,6 +36,10 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
         return EntityData(id: e['id'], name: e['name']);
       }).toList();
       _selectionController.add(entities);
+    } else if (eventType == 'cacheSelectionChanged') {
+      final List<dynamic> cachedEntities = map['cachedEntities'];
+      final entityNames = cachedEntities.map<String>((e) => e['name'] as String).toList();
+      _cacheSelectionController.add(entityNames);
     }
   }
 
@@ -42,6 +51,8 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
     List<String>? preselectedEntities,
     List<double>? selectionColor,
     List<PatchColor>? patchColors, // Add patchColors
+    bool enableCache = false,
+    List<double>? cacheColor,
   }) async {
     Uint8List modelBytes;
     String modelName;
@@ -78,6 +89,8 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
       'preselectedEntities': preselectedEntities,
       'selectionColor': selectionColor,
       'patchColors': patchColorsMap, // Pass patchColors
+      'enableCache': enableCache,
+      'cacheColor': cacheColor,
     };
 
     await _methodChannel.invokeMethod('loadModel', args);
@@ -190,5 +203,10 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
   @override
   Future<void> setCameraZoomLevel(double zoom) async {
     await _methodChannel.invokeMethod('setZoomLevel', {'zoom': zoom});
+  }
+
+  @override
+  Future<void> clearCache() async {
+    await _methodChannel.invokeMethod('clearCache');
   }
 }

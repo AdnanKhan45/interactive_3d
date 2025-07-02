@@ -63,20 +63,27 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
               Expanded(
                   child: Interactive3d(
                 controller: _controller,
+                enableCache: true,
+                cacheColor: [0.7, 0.7, 0.2, 0.5],
+                onCacheSelectionChanged: (cachedNames) {
+                  print('Cached: $cachedNames');
+                },
                 modelPath: 'assets/models/Tooth-3.glb',
                 iblPath: 'assets/models/giuseppe_bridge_4k_ibl.ktx',
                 skyboxPath: 'assets/models/giuseppe_bridge_4k_skybox.ktx',
                 iOSBackgroundEnvPath:
                     'assets/models/san_giuseppe_bridge_4k.hdr',
-                preselectedEntities: [
-                  "Teeth_Lower_1",
-                  "Teeth_Lower_2",
-                  "Teeth_Lower_3",
-                  "Neck"
-                ],
+                // preselectedEntities: [
+                //   "Teeth_Lower_1",
+                //   "Teeth_Lower_2",
+                //   "Teeth_Lower_3",
+                //   "Neck"
+                // ],
                 selectionColor: [0.32, 0.49, 0.55, 1.0], // Light Blue Color
                 defaultZoom: 2,
                 onSelectionChanged: (selectedEntities) {
+                  // Extract only names
+                  print("Selected: ${selectedEntities.map((e) => e.name).toList()}");
                   setState(() {
                     _selectedEntities = selectedEntities;
                   });
@@ -171,6 +178,17 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
               ),
             ),
           Align(
+              alignment: Alignment.topRight,
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20.0, vertical: 20),
+                child: ElevatedButton(
+                  onPressed: _clearCache,
+                  child: Text("Clear Cache"),
+                ),
+              ),
+            ),
+          Align(
             alignment: Alignment.topLeft,
             child: Padding(
               padding:
@@ -204,6 +222,14 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
       setState(() {
         _selectedEntities.clear();
       });
+    } catch (e) {
+      print('Error clearing selections: $e');
+    }
+  }
+
+  void _clearCache() async {
+    try {
+      await _controller.clearCache();
     } catch (e) {
       print('Error clearing selections: $e');
     }

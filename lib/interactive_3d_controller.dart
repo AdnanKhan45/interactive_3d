@@ -30,15 +30,22 @@ class Interactive3dController {
 
   Future<void> setCameraZoomLevel(double zoomLevel) async {
     if (_state == null) {
-      throw StateError('Controller is not attached to a widget');
+      throw StateError('Interactive3dController is not attached to a widget');
     }
     await _state!.setZoom(zoomLevel);
   }
 
   Future<void> updatePartGroupConfig({required bool isVisible, required ModelPartGroup group}) async {
     if (_state == null) {
-      throw StateError('Controller is not attached to a widget');
+      throw StateError('Interactive3dController is not attached to a widget');
     }
     await _state!.updatePartGroupConfig(isVisible: isVisible, group: group);
+  }
+
+  Future<void> clearCache() async {
+    if (_state == null) {
+      throw StateError('Interactive3dController is not attached to a widget');
+    }
+    await _state!.clearCache();
   }
 }
