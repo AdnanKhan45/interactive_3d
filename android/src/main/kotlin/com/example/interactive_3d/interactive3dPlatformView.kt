@@ -53,6 +53,20 @@ class Interactive3dPlatformView(
                 }
             }
         })
+
+        customView.setCacheSelectionListener(object : ModelView.CacheSelectionListener {
+            override fun onCacheSelectionChanged(cachedEntities: List<Map<String, Any>>) {
+                mainHandler.post {
+                    eventSink?.success(
+                        mapOf(
+                            "event" to "cacheSelectionChanged",
+                            "cachedEntities" to cachedEntities
+                        )
+                    )
+                }
+            }
+        })
+
     }
 
     // This is the main handler that will be used to post tasks to the main thread
@@ -81,19 +95,29 @@ class Interactive3dPlatformView(
                 val resources = call.argument<Map<String, ByteArray>>("resources") ?: emptyMap()
                 val preselectedEntities = call.argument<List<String>?>("preselectedEntities")
                 val selectionColor = call.argument<List<Double>?>("selectionColor")
-                val patchColors = call.argument<List<Map<String, Any>>>("patchColors") // Receive patchColors
+                val patchColors = call.argument<List<Map<String, Any>>>("patchColors")
+                val enableCache = call.argument<Boolean>("enableCache") ?: false
+                val cacheColor = call.argument<List<Double>?>("cacheColor")
 
                 if (modelBytes != null && modelName != null) {
                     val buffer = ByteBuffer.wrap(modelBytes)
                     mainHandler.post {
-                        customView.setModel(buffer, modelName, resources, preselectedEntities, selectionColor, patchColors)
+                        customView.setModel(
+                            buffer,
+                            modelName,
+                            resources,
+                            preselectedEntities,
+                            selectionColor,
+                            patchColors,
+                            enableCache,
+                            cacheColor
+                        )
                         result.success(null)
                     }
                 } else {
                     result.error("INVALID_ARGUMENT", "modelBytes or modelName is null", null)
                 }
             }
-
             "loadEnvironment" -> {
                 val iblBytes = call.argument<ByteArray>("iblBytes")
                 val skyboxBytes = call.argument<ByteArray>("skyboxBytes")
@@ -142,6 +166,18 @@ class Interactive3dPlatformView(
                     result.success(null)
                 }
             }
+            "clearCache" -> {
+                mainHandler.post {
+                    if (customView.enableCache && customView.cacheManager != null) {
+                        customView.clearCacheAndRestoreSelections()
+                        result.success(null)
+                    } else {
+                        result.error("CACHE_DISABLED", "Cache not enabled", null)
+                    }
+                }
+            }
+
+
 
             else -> result.notImplemented()
         }

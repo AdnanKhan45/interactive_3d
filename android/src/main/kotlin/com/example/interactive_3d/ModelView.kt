@@ -53,6 +53,12 @@ class ModelView : LinearLayout {
     private var patchColors: List<Map<String, Any>>? = null // Store entity-specific colors
     private val entityVisibilities = mutableMapOf<Int, Boolean>() // Track entity visibility
 
+    // Caching
+    var enableCache: Boolean = false
+    var cacheManager: Interactive3dCacheManager? = null
+    private var cacheColor: FloatArray = floatArrayOf(0.8f, 0.8f, 0.2f, 0.6f)
+    private var modelCacheKey: String = ""
+
     /**
      * Listener interface for selection changes in the 3D model.
      */
@@ -69,6 +75,17 @@ class ModelView : LinearLayout {
     fun setSelectionListener(listener: SelectionListener) {
         selectionListener = listener
     }
+
+    interface CacheSelectionListener {
+        fun onCacheSelectionChanged(cachedEntities: List<Map<String, Any>>)
+    }
+
+    private var cacheSelectionListener: CacheSelectionListener? = null
+
+    fun setCacheSelectionListener(listener: CacheSelectionListener) {
+        cacheSelectionListener = listener
+    }
+
 
     // Constructors
     constructor(context: Context?) : super(context) { init(context) }
@@ -210,8 +227,14 @@ class ModelView : LinearLayout {
         resources: Map<String, ByteArray>,
         preselectedEntities: List<String>?,
         selectionColor: List<Double>?,
-        patchColors: List<Map<String, Any>>? // Add patchColors
+        patchColors: List<Map<String, Any>>?,
+        enableCache: Boolean,
+        cacheColor: List<Double>?
     ) {
+        selectedEntities.clear()
+        sendSelectedEntitiesToFlutter()
+        sendCacheSelectionUpdate()
+
         this.pendingPreselectedEntities = preselectedEntities
         this.selectionColor = if (selectionColor?.size == 4) {
             floatArrayOf(
@@ -223,9 +246,29 @@ class ModelView : LinearLayout {
         } else {
             floatArrayOf(0.0f, 1.0f, 0.0f, 1.0f) // Default green
         }
-        this.patchColors = patchColors // Store patchColors
+        this.patchColors = patchColors
+
+        this.enableCache = enableCache
+        if (enableCache) {
+            val color = if (cacheColor != null && cacheColor.size == 4) {
+                floatArrayOf(
+                    cacheColor[0].toFloat(),
+                    cacheColor[1].toFloat(),
+                    cacheColor[2].toFloat(),
+                    cacheColor[3].toFloat()
+                )
+            } else {
+                floatArrayOf(0.8f, 0.8f, 0.2f, 0.6f) // Default cache color
+            }
+            cacheManager = Interactive3dCacheManager(context, fileName, color)
+            sendCacheSelectionUpdate()
+        } else {
+            cacheManager = null
+        }
+
         setModel(buffer, fileName, resources)
     }
+
 
     /**
      * Loads a 3D model (GLB or GLTF).
@@ -361,6 +404,12 @@ class ModelView : LinearLayout {
         selectionListener?.onSelectionChanged(items)
     }
 
+
+    fun sendCacheSelectionUpdate() {
+        val cached = cacheManager?.cachedEntities?.map { mapOf("name" to it) } ?: emptyList()
+        cacheSelectionListener?.onCacheSelectionChanged(cached)
+    }
+
     /**
      * Unselects the specified entities or all entities if none are provided.
      * @param entities List of entity IDs to unselect, or null to unselect all.
@@ -433,6 +482,11 @@ class ModelView : LinearLayout {
                     loadStartFence = null
 
                     applyPreselectedEntities()
+
+                    if (enableCache && cacheManager != null) {
+                        notifyCacheChanged();
+                    }
+
                 }
             }
 
@@ -468,8 +522,27 @@ class ModelView : LinearLayout {
                 if (selectedEntities.contains(entity)) {
                     resetRenderableColor(entity)
                     selectedEntities.remove(entity)
+                    sendSelectedEntitiesToFlutter()
                 } else {
                     val entityName = modelViewer.asset?.getName(entity)
+                    if (enableCache && entityName != null && cacheManager?.isCached(entityName) == true) {
+                        // Remove from cache, reset color, select as normal
+                        cacheManager?.removeFromCache(entityName)
+                        resetRenderableColor(entity)
+                        sendCacheSelectionUpdate()
+                        // Optionally select it
+                        val color = getEntityColor(entityName)
+                        setRenderableColor(entity, color[0], color[1], color[2], color[3])
+                        selectedEntities.add(entity)
+                        sendSelectedEntitiesToFlutter()
+                        return@pick
+                    } else {
+                        if (enableCache && entityName != null) {
+                            cacheManager?.addToCache(entityName)
+                            sendCacheSelectionUpdate()
+                        }
+                    }
+
                     val color = getEntityColor(entityName)
                     setRenderableColor(entity, color[0], color[1], color[2], color[3])
                     selectedEntities.add(entity)
@@ -478,5 +551,44 @@ class ModelView : LinearLayout {
             }
             return true
         }
+    }
+
+    fun clearCacheAndRestoreSelections() {
+        if (enableCache && cacheManager != null) {
+            val entitiesToClear = cacheManager!!.cachedEntities.toList()
+            cacheManager!!.clearCache()
+            // Unhighlight cache entities (but restore color if also selected)
+            modelViewer.asset?.getEntities()?.forEach { entity ->
+                val name = modelViewer.asset?.getName(entity)
+                if (name != null && entitiesToClear.contains(name)) {
+                    resetRenderableColor(entity)
+                    if (selectedEntities.contains(entity)) {
+                        val color = getEntityColor(name)
+                        setRenderableColor(entity, color[0], color[1], color[2], color[3])
+                    }
+                }
+            }
+            notifyCacheChanged()
+        }
+    }
+
+    private fun highlightAllCachedEntities() {
+        if (enableCache && cacheManager != null) {
+            modelViewer.asset?.let { asset ->
+                cacheManager?.cachedEntities?.forEach { cachedName ->
+                    asset.getEntities().forEach { entity ->
+                        val entityName = asset.getName(entity)
+                        if (entityName == cachedName && !selectedEntities.contains(entity)) {
+                            setRenderableColor(entity, cacheManager!!.cacheColor[0], cacheManager!!.cacheColor[1], cacheManager!!.cacheColor[2], cacheManager!!.cacheColor[3])
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fun notifyCacheChanged() {
+        highlightAllCachedEntities()
+        sendCacheSelectionUpdate()
     }
 }
