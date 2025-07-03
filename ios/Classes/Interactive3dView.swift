@@ -565,12 +565,10 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             NSLog("No geometry or material for node: \(node.name ?? "Unnamed")")
             return
         }
-
+        // Only save the original once per session/highlight cycle!
         if originalMaterials[node] == nil {
-            NSLog("Storing original material for: \(node.name ?? "Unnamed")")
             originalMaterials[node] = material.copy() as? SCNMaterial
         }
-
         let highlightColor = getEntityColor(nodeName: nodeName)
         material.diffuse.contents = highlightColor
         material.emission.contents = highlightColor.withAlphaComponent(0.3)
@@ -579,20 +577,19 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
     }
 
     private func resetNodeColor(_ node: SCNNode) {
-        guard let geometry = node.geometry, let material = geometry.firstMaterial else {
-            NSLog("No geometry or material to reset for node: \(node.name ?? "Unnamed")")
+        guard let geometry = node.geometry else {
+            NSLog("No geometry to reset for node: \(node.name ?? "Unnamed")")
             return
         }
         if let originalMaterial = originalMaterials[node] {
-            NSLog("Restoring original material for: \(node.name ?? "Unnamed")")
-            geometry.materials = [originalMaterial]
+            // Important: assign a *copy* to break pointer sharing!
+            geometry.materials = [originalMaterial.copy() as! SCNMaterial]
+            NSLog("Restored original material for: \(node.name ?? "Unnamed")")
+            // Remove the reference so future highlights cache the next original
             originalMaterials.removeValue(forKey: node)
         } else {
             NSLog("No original material found for: \(node.name ?? "Unnamed")")
-            // Optionally set to a default color if you want:
-            // material.diffuse.contents = UIColor.white
         }
-        material.multiply.contents = UIColor.clear
     }
 
     private func printSceneHierarchy(_ node: SCNNode, level: Int) {
