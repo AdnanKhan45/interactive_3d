@@ -254,6 +254,10 @@ class Interactive3dState extends State<Interactive3d> {
     await _platform!.clearCache();
   }
 
+  Future<void> refreshCacheHighlights() async {
+    await _platform!.refreshCacheHighlights();
+  }
+
   // Set the model part group if provided.
   Future<void> updatePartGroupConfig({required bool isVisible, required ModelPartGroup group}) async {
     await _platform!.updatePartGroupConfig(isVisible: isVisible, group: group);

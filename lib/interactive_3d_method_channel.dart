@@ -209,4 +209,9 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
   Future<void> clearCache() async {
     await _methodChannel.invokeMethod('clearCache');
   }
+
+  @override
+  Future<void> refreshCacheHighlights() async {
+    await _methodChannel.invokeMethod('refreshCacheHighlights');
+  }
 }

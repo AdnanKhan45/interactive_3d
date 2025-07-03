@@ -167,29 +167,43 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
               ),
             ],
           ),
-          if (_selectedEntities.isNotEmpty)
-            Align(
-              alignment: Alignment.topCenter,
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20.0, vertical: 20),
-                child: ElevatedButton(
-                  onPressed: _clearSelections,
-                  child: Text("Clear"),
-                ),
-              ),
-            ),
-          Align(
-              alignment: Alignment.topRight,
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20.0, vertical: 20),
-                child: ElevatedButton(
-                  onPressed: _clearCache,
-                  child: Text("Clear Cache"),
-                ),
-              ),
-            ),
+           Padding(
+             padding: const EdgeInsets.only(top: 40.0),
+             child: Row(
+               children: [
+                 Expanded(
+                   child: Padding(
+                     padding:
+                     const EdgeInsets.symmetric(horizontal: 10.0, vertical: 20),
+                     child: ElevatedButton(
+                       onPressed: _clearSelections,
+                       child: Text("Clear"),
+                     ),
+                   ),
+                 ),
+                 Expanded(
+                   child: Padding(
+                     padding:
+                     const EdgeInsets.symmetric(horizontal: 10.0, vertical: 20),
+                     child: ElevatedButton(
+                       onPressed: _clearCache,
+                       child: Text("Clear Cache"),
+                     ),
+                   ),
+                 ),
+                 Expanded(
+                   child: Padding(
+                     padding:
+                     const EdgeInsets.symmetric(horizontal: 10.0, vertical: 20),
+                     child: ElevatedButton(
+                       onPressed: _refreshCacheHighlight,
+                       child: Text("Refresh Cache"),
+                     ),
+                   ),
+                 ),
+               ],
+             ),
+           ),
           Align(
             alignment: Alignment.topLeft,
             child: Padding(
@@ -232,6 +246,14 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
   void _clearCache() async {
     try {
       await interactive3dController.clearCache();
+    } catch (e) {
+      print('Error clearing selections: $e');
+    }
+  }
+
+  void _refreshCacheHighlight() async {
+    try {
+      await interactive3dController.refreshCacheHighlights();
     } catch (e) {
       print('Error clearing selections: $e');
     }

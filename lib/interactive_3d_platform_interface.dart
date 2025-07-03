@@ -45,6 +45,9 @@ abstract class Interactive3dPlatform extends PlatformInterface {
   /// Method to clear all selected entities in the 3D model.
   Future<void> clearCache();
 
+  /// Method to refresh the cache highlights for a specific view.
+  Future<void> refreshCacheHighlights();
+
   // Load HDR or EXR background for iOS
   Future<void> loadHdrBackground({
     String? backgroundPath,

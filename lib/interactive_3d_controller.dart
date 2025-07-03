@@ -48,4 +48,11 @@ class Interactive3dController {
     }
     await _state!.clearCache();
   }
+
+  Future<void> refreshCacheHighlights() async {
+    if (_state == null) {
+      throw StateError('Interactive3dController is not attached to a widget');
+    }
+    await _state!.refreshCacheHighlights();
+  }
 }

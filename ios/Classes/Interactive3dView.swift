@@ -213,9 +213,12 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             } else {
                 result(FlutterError(code: "CACHE_DISABLED", message: "Cache not enabled", details: nil))
             }
-
-
-
+            
+        case "refreshCacheHighlights":
+            DispatchQueue.main.async { [weak self] in
+                self?.refreshCacheHighlights()
+                result(nil)
+            }
 
         default:
             result(FlutterMethodNotImplemented)
@@ -749,4 +752,36 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
 
         scnView.setNeedsDisplay()
     }
+    
+    func refreshCacheHighlights() {
+        guard let scene = scnView.scene else { return }
+        // 1. Reset all nodes to original color
+        scene.rootNode.enumerateChildNodes { (node, _) in
+            if let geometryNode = findGeometryNode(in: node) {
+                resetNodeColor(geometryNode)
+            }
+        }
+        // 2. Apply cache color to all cached entities (cache wins)
+        var cachedSet = Set<String>()
+        if enableCache, let cacheMgr = cacheManager {
+            for cachedName in cacheMgr.cachedEntities {
+                cachedSet.insert(cachedName)
+                scene.rootNode.enumerateChildNodes { (node, _) in
+                    if let nodeName = node.name, nodeName == cachedName,
+                       let geometryNode = findGeometryNode(in: node) {
+                        applyCacheHighlight(to: geometryNode, forNodeName: nodeName)
+                    }
+                }
+            }
+        }
+        // 3. Apply selection color ONLY to those NOT in cache
+        for node in selectedNodes {
+            if let name = node.name, !cachedSet.contains(name),
+               let geometryNode = findGeometryNode(in: node) {
+                applyHighlight(to: geometryNode, forNodeName: name)
+            }
+        }
+    }
+
+
 }
