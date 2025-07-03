@@ -473,6 +473,7 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             return
         }
 
+        // Find the correct node
         var targetNode: SCNNode? = result.node
         var geometryNode: SCNNode? = targetNode
         while geometryNode != nil && geometryNode!.geometry == nil {
@@ -482,6 +483,7 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             geometryNode = findGeometryNode(in: targetNode!)
         }
 
+        // Find the most "named" parent node (for logical names)
         while targetNode != nil && (targetNode!.name == nil || targetNode!.name!.isEmpty || targetNode!.name!.starts(with: "Mesh.") || targetNode!.name!.hasSuffix(".001")) {
             targetNode = targetNode?.parent
         }
@@ -491,42 +493,44 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             NSLog("No geometry node found for: \(nameNode.name ?? "Unnamed")")
             return
         }
-        
-        guard let nameNode = targetNode, let nodeName = nameNode.name else { return }
-        guard let geometryNode = findGeometryNode(in: nameNode) else { return }
-        
-        // Check if in cache
+        guard let nodeName = nameNode.name else { return }
+
+        // === Cache selection logic ===
         if enableCache, let cacheMgr = cacheManager, cacheMgr.isCached(nodeName) {
-            // UX: Remove from cache (or you may want to select it and remove from cache, up to you)
+            // UX: Remove from cache, reset color, select as normal
             cacheMgr.removeFromCache(nodeName)
-            resetNodeColor(geometryNode)
+            resetNodeColor(highlightNode)
             NSLog("Removed from cache: \(nodeName)")
-            sendCacheSelectionUpdate()
-            
+
+            // Now select as normal
             selectedNodes.insert(nameNode)
-            applyHighlight(to: highlightNode, forNodeName: nameNode.name)
-            NSLog("Selected: \(nameNode.name ?? "Unnamed")")
+            applyHighlight(to: highlightNode, forNodeName: nodeName)
+            NSLog("Selected: \(nodeName)")
+            sendCacheSelectionUpdate()
             sendSelectionUpdate()
             return
         }
 
+        // === Selection toggle logic ===
         if selectedNodes.contains(nameNode) {
+            // Deselect it
             selectedNodes.remove(nameNode)
             resetNodeColor(highlightNode)
-            NSLog("Deselected: \(nameNode.name ?? "Unnamed")")
-        } else {
-            selectedNodes.insert(nameNode)
-            applyHighlight(to: highlightNode, forNodeName: nameNode.name)
-            NSLog("Selected: \(nameNode.name ?? "Unnamed")")
-            
-            if enableCache {
-                NSLog("Cached is \(enableCache) | Adding to cache: \(nodeName)")
-                cacheManager?.addToCache(nodeName)
+            NSLog("Deselected: \(nodeName)")
+            // If it's cached, re-apply cache color
+            if enableCache, let cacheMgr = cacheManager, cacheMgr.isCached(nodeName) {
+                applyCacheHighlight(to: highlightNode, forNodeName: nodeName)
             }
+            sendSelectionUpdate()
+        } else {
+            // Select it
+            selectedNodes.insert(nameNode)
+            applyHighlight(to: highlightNode, forNodeName: nodeName)
+            NSLog("Selected: \(nodeName)")
+            sendSelectionUpdate()
         }
-
-        sendSelectionUpdate()
     }
+
 
     private func findGeometryNode(in node: SCNNode) -> SCNNode? {
         NSLog("Checking node for geometry: \(node.name ?? "Unnamed") | Has geometry: \(node.geometry != nil)")
