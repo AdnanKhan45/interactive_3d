@@ -3,6 +3,9 @@ import 'package:interactive_3d/interactive_3d.dart';
 import 'package:interactive_3d/interactive_3d_controller.dart';
 import 'result_page.dart';
 
+final Interactive3dController interactive3dController = Interactive3dController();
+
+
 class GlbLoaderExample extends StatefulWidget {
   const GlbLoaderExample({super.key});
 
@@ -15,7 +18,6 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
 
   bool _toothVisibiliy = true;
 
-  final Interactive3dController _controller = Interactive3dController();
 
   List<String> toothGroup = [
     "Teeth_Lower_1",
@@ -62,7 +64,7 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
             children: [
               Expanded(
                   child: Interactive3d(
-                controller: _controller,
+                controller: interactive3dController,
                 enableCache: true,
                 cacheColor: [0.7, 0.7, 0.2, 0.5],
                 onCacheSelectionChanged: (cachedNames) {
@@ -201,7 +203,7 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
 
                       _toothVisibiliy = visibility;
 
-                      _controller.updatePartGroupConfig(
+                      interactive3dController.updatePartGroupConfig(
                           isVisible: _toothVisibiliy,
                           group: ModelPartGroup(
                               title: "Teeth", names: toothGroup));
@@ -218,7 +220,7 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
 
   void _clearSelections() async {
     try {
-      await _controller.clearSelections();
+      await interactive3dController.clearSelections();
       setState(() {
         _selectedEntities.clear();
       });
@@ -229,7 +231,7 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
 
   void _clearCache() async {
     try {
-      await _controller.clearCache();
+      await interactive3dController.clearCache();
     } catch (e) {
       print('Error clearing selections: $e');
     }
@@ -238,7 +240,7 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
   // TO REMOVE SPECIFIC ENTITY SELECTION
   void _removeEntity(int entityId) async {
     try {
-      await _controller.unselectEntities(entityIds: [entityId]);
+      await interactive3dController.unselectEntities(entityIds: [entityId]);
       setState(() {
         _selectedEntities.removeWhere((entity) => entity.id == entityId);
       });

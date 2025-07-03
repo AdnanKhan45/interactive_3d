@@ -1,6 +1,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:interactive_3d/interactive_3d.dart';
+import 'package:interactive_3d_example/glb_loader_example.dart';
 
 class ResultPage extends StatefulWidget {
   final List<EntityData> data;
@@ -18,6 +19,9 @@ class _ResultPageState extends State<ResultPage> {
       appBar: AppBar(title: const Text('Result page')),
       body: Column(
         children: [
+          ElevatedButton(onPressed: () {
+            interactive3dController.clearCache();
+          }, child: Text("Clear Cache")),
           Expanded(
             child: ListView.builder(
               itemCount: widget.data.length,

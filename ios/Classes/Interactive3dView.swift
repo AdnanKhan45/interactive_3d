@@ -192,24 +192,28 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             if enableCache, let cacheMgr = cacheManager {
                 let entitiesToClear = Array(cacheMgr.cachedEntities)
                 cacheMgr.clearCache()
-                for cachedName in entitiesToClear {
-                    scnView.scene?.rootNode.enumerateChildNodes { (node, _) in
-                        if let nodeName = node.name, nodeName == cachedName {
-                            if let geometryNode = findGeometryNode(in: node) {
-                                resetNodeColor(geometryNode)
-                                // If the node is still selected, re-apply selection highlight!
-                                if selectedNodes.contains(node) {
-                                    applyHighlight(to: geometryNode, forNodeName: nodeName)
-                                }
-                            }
+                var nodesRestored = 0
+                scnView.scene?.rootNode.enumerateChildNodes { (node, _) in
+                    if let nodeName = node.name, entitiesToClear.contains(nodeName) {
+                        if let geometryNode = findGeometryNode(in: node) {
+                            resetNodeColor(geometryNode)
+                            nodesRestored += 1
                         }
                     }
                 }
+                // Remove restored nodes from originalMaterials, so re-highlighting works as expected later
+                for (node, _) in originalMaterials {
+                    if let nodeName = node.name, entitiesToClear.contains(nodeName) {
+                        originalMaterials.removeValue(forKey: node)
+                    }
+                }
                 sendCacheSelectionUpdate()
+                NSLog("Cleared cache, restored \(nodesRestored) node materials")
                 result(nil)
             } else {
                 result(FlutterError(code: "CACHE_DISABLED", message: "Cache not enabled", details: nil))
             }
+
 
 
 
@@ -579,13 +583,14 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             NSLog("No geometry or material to reset for node: \(node.name ?? "Unnamed")")
             return
         }
-
         if let originalMaterial = originalMaterials[node] {
             NSLog("Restoring original material for: \(node.name ?? "Unnamed")")
             geometry.materials = [originalMaterial]
             originalMaterials.removeValue(forKey: node)
         } else {
             NSLog("No original material found for: \(node.name ?? "Unnamed")")
+            // Optionally set to a default color if you want:
+            // material.diffuse.contents = UIColor.white
         }
         material.multiply.contents = UIColor.clear
     }
