@@ -781,7 +781,11 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
                 applyHighlight(to: geometryNode, forNodeName: name)
             }
         }
+
+        selectedNodes.removeAll()
+        sendSelectionUpdate()
     }
+
 
 
 }
