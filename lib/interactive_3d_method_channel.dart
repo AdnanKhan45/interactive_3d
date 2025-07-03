@@ -53,6 +53,7 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
     List<PatchColor>? patchColors, // Add patchColors
     bool enableCache = false,
     List<double>? cacheColor,
+    bool clearSelectionsOnHighlight = false,
   }) async {
     Uint8List modelBytes;
     String modelName;
@@ -91,6 +92,7 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
       'patchColors': patchColorsMap, // Pass patchColors
       'enableCache': enableCache,
       'cacheColor': cacheColor,
+      'clearSelectionsOnHighlight': clearSelectionsOnHighlight,
     };
 
     await _methodChannel.invokeMethod('loadModel', args);
@@ -213,5 +215,10 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
   @override
   Future<void> refreshCacheHighlights() async {
     await _methodChannel.invokeMethod('refreshCacheHighlights');
+  }
+
+  @override
+  Future<void> removeFromCache(List<String> names) async {
+    await _methodChannel.invokeMethod('removeFromCache', names);
   }
 }

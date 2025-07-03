@@ -23,6 +23,7 @@ abstract class Interactive3dPlatform extends PlatformInterface {
     List<PatchColor>? patchColors, // Add patchColors
     bool enableCache = false,
     List<double>? cacheColor,
+    bool clearSelectionsOnHighlight = false,
   });
 
   /// Method to load the environment from assets or network URLs.
@@ -47,6 +48,9 @@ abstract class Interactive3dPlatform extends PlatformInterface {
 
   /// Method to refresh the cache highlights for a specific view.
   Future<void> refreshCacheHighlights();
+
+  /// Method to clear specific cached entities
+  Future<void> removeFromCache(List<String> names);
 
   // Load HDR or EXR background for iOS
   Future<void> loadHdrBackground({

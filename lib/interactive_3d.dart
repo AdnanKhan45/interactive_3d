@@ -96,6 +96,9 @@ class Interactive3d extends StatefulWidget {
   /// Callback for when the cached selection changes (persistent cache).
   final void Function(List<String>)? onCacheSelectionChanged;
 
+  /// Whether to clear the selection when highlighting cached entities.
+  final bool clearSelectionOnHighlight;
+
   /// Constructor for the `Interactive3d` widget.
   const Interactive3d({
     super.key,
@@ -117,6 +120,7 @@ class Interactive3d extends StatefulWidget {
     this.enableCache = false,
     this.cacheColor,
     this.onCacheSelectionChanged,
+    this.clearSelectionOnHighlight = false
   });
 
   @override
@@ -185,6 +189,7 @@ class Interactive3dState extends State<Interactive3d> {
       'resources': widget.resources,
       'enableCache': widget.enableCache,
       'cacheColor': widget.cacheColor,
+      'clearSelectionOnHighlight': widget.clearSelectionOnHighlight,
       // For cacheKey, use modelPath or modelUrl (handled natively for uniqueness)
       'name': widget.modelPath?.split('/').last ?? widget.modelUrl?.split('/').last,
     };
@@ -222,6 +227,7 @@ class Interactive3dState extends State<Interactive3d> {
       patchColors: widget.patchColors, // Pass patchColors
       enableCache: widget.enableCache,
       cacheColor: widget.cacheColor,
+      clearSelectionsOnHighlight: widget.clearSelectionOnHighlight
     );
 
     // Load environment.
@@ -256,6 +262,10 @@ class Interactive3dState extends State<Interactive3d> {
 
   Future<void> refreshCacheHighlights() async {
     await _platform!.refreshCacheHighlights();
+  }
+
+  Future<void> removeFromCache(List<String> names) {
+    return _platform!.removeFromCache(names);
   }
 
   // Set the model part group if provided.

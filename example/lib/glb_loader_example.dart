@@ -66,6 +66,7 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
                   child: Interactive3d(
                 controller: interactive3dController,
                 enableCache: true,
+                    clearSelectionOnHighlight: true,
                 cacheColor: [0.7, 0.7, 0.2, 0.5],
                 onCacheSelectionChanged: (cachedNames) {
                   print('Cached: $cachedNames');
@@ -169,38 +170,56 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
           ),
            Padding(
              padding: const EdgeInsets.only(top: 40.0),
-             child: Row(
+             child: Column(
                children: [
-                 Expanded(
-                   child: Padding(
-                     padding:
-                     const EdgeInsets.symmetric(horizontal: 10.0, vertical: 20),
-                     child: ElevatedButton(
-                       onPressed: _clearSelections,
-                       child: Text("Clear"),
+                 Row(
+                   children: [
+                     Expanded(
+                       child: Padding(
+                         padding:
+                         const EdgeInsets.symmetric(horizontal: 10.0, vertical: 20),
+                         child: ElevatedButton(
+                           onPressed: _clearSelections,
+                           child: Text("Clear"),
+                         ),
+                       ),
                      ),
-                   ),
-                 ),
-                 Expanded(
-                   child: Padding(
-                     padding:
-                     const EdgeInsets.symmetric(horizontal: 10.0, vertical: 20),
-                     child: ElevatedButton(
-                       onPressed: _clearCache,
-                       child: Text("Clear Cache"),
+                     Expanded(
+                       child: Padding(
+                         padding:
+                         const EdgeInsets.symmetric(horizontal: 10.0, vertical: 20),
+                         child: ElevatedButton(
+                           onPressed: _clearCache,
+                           child: Text("Clear Cache"),
+                         ),
+                       ),
                      ),
-                   ),
-                 ),
-                 Expanded(
-                   child: Padding(
-                     padding:
-                     const EdgeInsets.symmetric(horizontal: 10.0, vertical: 20),
-                     child: ElevatedButton(
-                       onPressed: _refreshCacheHighlight,
-                       child: Text("Refresh Cache"),
+                     Expanded(
+                       child: Padding(
+                         padding:
+                         const EdgeInsets.symmetric(horizontal: 10.0, vertical: 20),
+                         child: ElevatedButton(
+                           onPressed: _refreshCacheHighlight,
+                           child: Text("Refresh Cache"),
+                         ),
+                       ),
                      ),
-                   ),
+                   ],
                  ),
+                 Row(
+                   children: [
+                     Expanded(
+                       child: Padding(
+                         padding:
+                         const EdgeInsets.symmetric(horizontal: 10.0, vertical: 20),
+                         child: ElevatedButton(
+                           onPressed: _clearSelections,
+                           child: Text("Clear Specific"),
+                         ),
+                       ),
+                     ),
+                   ],
+                 )
                ],
              ),
            ),
@@ -230,6 +249,14 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
         ],
       ),
     );
+  }
+
+  void _clearSpecificCache() async {
+    try {
+      await interactive3dController.removeFromCache(["Teeth_Lower_1", "Neck"]);
+    } catch (e) {
+      print('Error clearing specific cache: $e');
+    }
   }
 
   void _clearSelections() async {

@@ -18,6 +18,7 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
     private var nodeOpacities: [SCNNode: CGFloat] = [:]
     private var patchColors: [[String: Any]]?
     private var selectionColor: [Double]?
+    private var clearSelectionsOnHighlight: Bool = false
     
     // Cache Related
     
@@ -81,6 +82,7 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             let preselectedEntities = args["preselectedEntities"] as? [String]
             let patchColors = args["patchColors"] as? [[String: Any]]
             let selectionColor = args["selectionColor"] as? [Double]
+            let clearSelectionsOnHighlight = (args["clearSelectionsOnHighlight"] as? Bool) ?? false
             
             // NEW: Cache params from Dart
             enableCache = (args["enableCache"] as? Bool) ?? false
@@ -110,6 +112,7 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             DispatchQueue.main.async { [weak self] in
                 do {
                     self?.pendingPreselectedEntities = preselectedEntities
+                    self?.clearSelectionsOnHighlight = clearSelectionsOnHighlight
                     self?.patchColors = patchColors
                     self?.selectionColor = selectionColor
                     try self?.loadModel(modelBytes: modelBytes)
@@ -219,6 +222,16 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
                 self?.refreshCacheHighlights()
                 result(nil)
             }
+        case "removeFromCache":
+            guard let names = call.arguments as? [String] else {
+                result(FlutterError(code: "INVALID_ARGUMENT", message: "names required", details: nil))
+                return
+            }
+            DispatchQueue.main.async { [weak self] in
+                self?.removeFromCache(names: names)
+                result(nil)
+            }
+
 
         default:
             result(FlutterMethodNotImplemented)
@@ -781,11 +794,32 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
                 applyHighlight(to: geometryNode, forNodeName: name)
             }
         }
-
-        selectedNodes.removeAll()
-        sendSelectionUpdate()
+        // 4. Clear selection IF property is set
+        if clearSelectionsOnHighlight {
+            selectedNodes.removeAll()
+            sendSelectionUpdate()
+        }
     }
 
+
+
+
+    func removeFromCache(names: [String], clearSelections: Bool = false) {
+        guard enableCache, let cacheMgr = cacheManager, let scene = scnView.scene else { return }
+        for name in names {
+            cacheMgr.removeFromCache(name)
+            // Find the node and reset its color
+            scene.rootNode.enumerateChildNodes { (node, _) in
+                if let nodeName = node.name, nodeName == name,
+                   let geometryNode = findGeometryNode(in: node) {
+                    resetNodeColor(geometryNode)
+                }
+            }
+        }
+        // Refresh highlights: this will re-apply cache/selection logic as usual
+        refreshCacheHighlights()
+        sendCacheSelectionUpdate()
+    }
 
 
 }
