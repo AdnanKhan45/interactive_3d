@@ -473,7 +473,6 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             return
         }
 
-        // Find the correct node
         var targetNode: SCNNode? = result.node
         var geometryNode: SCNNode? = targetNode
         while geometryNode != nil && geometryNode!.geometry == nil {
@@ -483,7 +482,6 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             geometryNode = findGeometryNode(in: targetNode!)
         }
 
-        // Find the most "named" parent node (for logical names)
         while targetNode != nil && (targetNode!.name == nil || targetNode!.name!.isEmpty || targetNode!.name!.starts(with: "Mesh.") || targetNode!.name!.hasSuffix(".001")) {
             targetNode = targetNode?.parent
         }
@@ -493,44 +491,43 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             NSLog("No geometry node found for: \(nameNode.name ?? "Unnamed")")
             return
         }
-        guard let nodeName = nameNode.name else { return }
 
-        // === Cache selection logic ===
+        guard let nameNode = targetNode, let nodeName = nameNode.name else { return }
+        guard let geometryNode = findGeometryNode(in: nameNode) else { return }
+
+        // If the node is cached, remove from cache AND unselect
         if enableCache, let cacheMgr = cacheManager, cacheMgr.isCached(nodeName) {
-            // UX: Remove from cache, reset color, select as normal
             cacheMgr.removeFromCache(nodeName)
-            resetNodeColor(highlightNode)
+            resetNodeColor(geometryNode)
             NSLog("Removed from cache: \(nodeName)")
-
-            // Now select as normal
-            selectedNodes.insert(nameNode)
-            applyHighlight(to: highlightNode, forNodeName: nodeName)
-            NSLog("Selected: \(nodeName)")
             sendCacheSelectionUpdate()
-            sendSelectionUpdate()
+
+            // If it was also selected, unselect it
+            if selectedNodes.contains(nameNode) {
+                selectedNodes.remove(nameNode)
+                NSLog("Deselected: \(nameNode.name ?? "Unnamed")")
+                sendSelectionUpdate()
+            }
             return
         }
 
-        // === Selection toggle logic ===
+        // Toggle selection
         if selectedNodes.contains(nameNode) {
-            // Deselect it
             selectedNodes.remove(nameNode)
             resetNodeColor(highlightNode)
-            NSLog("Deselected: \(nodeName)")
-            // If it's cached, re-apply cache color
-            if enableCache, let cacheMgr = cacheManager, cacheMgr.isCached(nodeName) {
-                applyCacheHighlight(to: highlightNode, forNodeName: nodeName)
-            }
-            sendSelectionUpdate()
+            NSLog("Deselected: \(nameNode.name ?? "Unnamed")")
         } else {
-            // Select it
             selectedNodes.insert(nameNode)
-            applyHighlight(to: highlightNode, forNodeName: nodeName)
-            NSLog("Selected: \(nodeName)")
-            sendSelectionUpdate()
+            applyHighlight(to: highlightNode, forNodeName: nameNode.name)
+            NSLog("Selected: \(nameNode.name ?? "Unnamed")")
+            if enableCache {
+                NSLog("Cached is \(enableCache) | Adding to cache: \(nodeName)")
+                cacheManager?.addToCache(nodeName)
+            }
         }
-    }
 
+        sendSelectionUpdate()
+    }
 
     private func findGeometryNode(in node: SCNNode) -> SCNNode? {
         NSLog("Checking node for geometry: \(node.name ?? "Unnamed") | Has geometry: \(node.geometry != nil)")
@@ -809,19 +806,31 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
 
 
     func removeFromCache(names: [String], clearSelections: Bool = false) {
-        guard enableCache, let cacheMgr = cacheManager, let scene = scnView.scene else { return }
+        guard let scene = scnView.scene else { return }
+        let cacheMgr = enableCache ? cacheManager : nil
         for name in names {
-            cacheMgr.removeFromCache(name)
-            // Find the node and reset its color
-            scene.rootNode.enumerateChildNodes { (node, _) in
-                if let nodeName = node.name, nodeName == name,
-                   let geometryNode = findGeometryNode(in: node) {
+            // Remove from cache if present
+            cacheMgr?.removeFromCache(name)
+            // Unselect if selected
+            if let node = scene.rootNode.childNode(withName: name, recursively: true) {
+                selectedNodes.remove(node)
+                if let geometryNode = findGeometryNode(in: node) {
                     resetNodeColor(geometryNode)
+                }
+            } else {
+                // If not found directly, fallback to enumerate (rare cases)
+                scene.rootNode.enumerateChildNodes { (node, stop) in
+                    if let nodeName = node.name, nodeName == name {
+                        selectedNodes.remove(node)
+                        if let geometryNode = findGeometryNode(in: node) {
+                            resetNodeColor(geometryNode)
+                        }
+                        stop.pointee = true
+                    }
                 }
             }
         }
-        // Refresh highlights: this will re-apply cache/selection logic as usual
-        refreshCacheHighlights()
+        sendSelectionUpdate()
         sendCacheSelectionUpdate()
     }
 

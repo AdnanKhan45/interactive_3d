@@ -213,7 +213,7 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
                          padding:
                          const EdgeInsets.symmetric(horizontal: 10.0, vertical: 20),
                          child: ElevatedButton(
-                           onPressed: _clearSelections,
+                           onPressed: _clearSpecificCache,
                            child: Text("Clear Specific"),
                          ),
                        ),
