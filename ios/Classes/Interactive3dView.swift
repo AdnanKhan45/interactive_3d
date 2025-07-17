@@ -285,24 +285,24 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
     }
 
     private func isTapAllowed(_ nodeName: String) -> Bool {
-        // 0️⃣ Always allow un‑selecting
+        // Always allow un‑selecting
         if selectedNodes.contains(where: { $0.name == nodeName }) {
             return true
         }
 
-        // 1️⃣ Find the config and index for this node
+        // Find the config and index for this node
         guard let config = sequenceConfigs.first(where: { $0.order.contains(nodeName) }),
               let idx    = config.order.firstIndex(of: nodeName)
         else {
             return true  // not part of any sequence → free
         }
 
-        // 2️⃣ What’s already selected in this group?
+        // What’s already selected in this group?
         let selectedInGroup = selectedNodes
             .compactMap { $0.name }
             .filter    { config.order.contains($0) }
 
-        // 3️⃣ What’s selected in the tied group (if any)?
+        // What’s selected in the tied group (if any)?
         var selectedInTied: [String] = []
         if let tiedName = config.tiedGroup,
            let tiedConfig = sequenceConfigs.first(where: { $0.group == tiedName }) {
@@ -311,27 +311,27 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
                 .filter    { tiedConfig.order.contains($0) }
         }
 
-        // 4️⃣ If this group hasn’t started yet…
+        // If this group hasn’t started yet…
         if selectedInGroup.isEmpty {
-            // 4a. other group started → enforce matching index
+            // other group started → enforce matching index
             if !selectedInTied.isEmpty,
                let tiedName = config.tiedGroup,
                let tiedConfig = sequenceConfigs.first(where: { $0.group == tiedName }) {
                 let requiredNode = tiedConfig.order[idx]
                 return selectedInTied.contains(requiredNode)
             }
-            // 4b. otherwise free first pick
+            // otherwise free first pick
             return true
         }
 
-        // 5️⃣ Once started → only adjacent via allowedNext
+        // Once started → only adjacent via allowedNext
         for name in selectedInGroup {
             if allowedNext[name]?.contains(nodeName) == true {
                 return true
             }
         }
 
-        // 6️⃣ Everything else is rejected
+        // Everything else is rejected
         return false
     }
 
