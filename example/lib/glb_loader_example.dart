@@ -91,6 +91,30 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
                     _selectedEntities = selectedEntities;
                   });
                 },
+                    selectionSequence: [
+                      SequenceConfig(
+                        group: 'Teeth_Lower',
+                        order: List.generate(16, (i) => 'Teeth_Lower_${i+1}'),
+                        bidirectional: true,
+                      ),
+                      SequenceConfig(
+                        group: 'Teeth_Upper',
+                        order: List.generate(16, (i) => 'Teeth_Upper_${i+1}'),
+                        bidirectional: true,
+                      ),
+                      // SequenceConfig(
+                      //   group: 'teeth',
+                      //   order: List.generate(32, (i) => 'teeth_${i+1}'),
+                      //   bidirectional: true,
+                      //   tiedGroup: 'gum',
+                      // ),
+                      // SequenceConfig(
+                      //   group: 'gum',
+                      //   order: List.generate(32, (i) => 'gum_${i+1}'),
+                      //   bidirectional: true,
+                      //   tiedGroup: 'teeth',
+                      // ),
+                    ],
                 patchColors: [
                   PatchColor(
                     name: "Hard_Plate_L",

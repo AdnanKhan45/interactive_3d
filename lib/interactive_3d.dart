@@ -7,6 +7,29 @@ import 'interactive_3d_controller.dart';
 import 'interactive_3d_method_channel.dart';
 import 'interactive_3d_platform_interface.dart';
 
+
+/// Configuration for the sequence selection of entities in the 3D model.
+class SequenceConfig {
+  final String group;
+  final List<String> order;
+  final bool bidirectional;
+  final String? tiedGroup;
+
+  SequenceConfig({
+    required this.group,
+    required this.order,
+    this.bidirectional = false,
+    this.tiedGroup,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'group': group,
+    'order': order,
+    'bidirectional': bidirectional,
+    if (tiedGroup != null) 'tiedGroup': tiedGroup,
+  };
+}
+
 /// Represents a patch color for a specific entity in the 3D model.
 class PatchColor {
   /// The name of the entity to apply the color to.
@@ -99,6 +122,9 @@ class Interactive3d extends StatefulWidget {
   /// Whether to clear the selection when highlighting cached entities.
   final bool clearSelectionOnHighlight;
 
+  /// A list of sequence configurations for selecting entities in a specific order.
+  final List<SequenceConfig>? selectionSequence;
+
   /// Constructor for the `Interactive3d` widget.
   const Interactive3d({
     super.key,
@@ -120,7 +146,8 @@ class Interactive3d extends StatefulWidget {
     this.enableCache = false,
     this.cacheColor,
     this.onCacheSelectionChanged,
-    this.clearSelectionOnHighlight = false
+    this.clearSelectionOnHighlight = false,
+    this.selectionSequence
   });
 
   @override
@@ -192,6 +219,9 @@ class Interactive3dState extends State<Interactive3d> {
       'clearSelectionOnHighlight': widget.clearSelectionOnHighlight,
       // For cacheKey, use modelPath or modelUrl (handled natively for uniqueness)
       'name': widget.modelPath?.split('/').last ?? widget.modelUrl?.split('/').last,
+      'selectionSequence': widget.selectionSequence
+          ?.map((c) => c.toJson())
+          .toList(),
     };
   }
 
@@ -227,7 +257,8 @@ class Interactive3dState extends State<Interactive3d> {
       patchColors: widget.patchColors, // Pass patchColors
       enableCache: widget.enableCache,
       cacheColor: widget.cacheColor,
-      clearSelectionsOnHighlight: widget.clearSelectionOnHighlight
+      clearSelectionsOnHighlight: widget.clearSelectionOnHighlight,
+      selectionSequence: widget.selectionSequence,
     );
 
     // Load environment.

@@ -24,6 +24,7 @@ abstract class Interactive3dPlatform extends PlatformInterface {
     bool enableCache = false,
     List<double>? cacheColor,
     bool clearSelectionsOnHighlight = false,
+    final List<SequenceConfig>? selectionSequence
   });
 
   /// Method to load the environment from assets or network URLs.

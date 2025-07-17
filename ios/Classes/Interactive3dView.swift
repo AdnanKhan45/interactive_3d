@@ -26,6 +26,20 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
     private var enableCache: Bool = false
     private var cacheColor: UIColor = UIColor(red: 0.8, green: 0.8, blue: 0.2, alpha: 0.6) // default cache color
     private var modelCacheKey: String = ""
+    
+    // Sequence Selection Related
+    
+    struct SequenceConfig {
+        let group: String
+        let order: [String]
+        let bidirectional: Bool
+        let tiedGroup: String?
+    }
+    
+    private var sequenceConfigs: [SequenceConfig] = []
+    private var allowedNext: [String: Set<String>] = [:]
+    private var startNodes: Set<String> = []
+
 
     init(
         frame: CGRect,
@@ -84,7 +98,23 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             let selectionColor = args["selectionColor"] as? [Double]
             let clearSelectionsOnHighlight = (args["clearSelectionsOnHighlight"] as? Bool) ?? false
             
-            // NEW: Cache params from Dart
+            if let seqArray = args["selectionSequence"] as? [[String: Any]] {
+                sequenceConfigs = seqArray.compactMap { dict in
+                    guard let group = dict["group"] as? String,
+                          let order = dict["order"] as? [String],
+                          let bidirectional = dict["bidirectional"] as? Bool else { return nil }
+                    let tiedGroup = dict["tiedGroup"] as? String
+                            return SequenceConfig(
+                                group: group,
+                                order: order,
+                                bidirectional: bidirectional,
+                                tiedGroup: tiedGroup
+                            )
+                }
+                buildSequenceMaps()
+            }
+            
+            // Cache params from Dart
             enableCache = (args["enableCache"] as? Bool) ?? false
             if let cacheColorArray = args["cacheColor"] as? [Double], cacheColorArray.count == 4 {
                 cacheColor = UIColor(
@@ -238,7 +268,74 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
         }
     }
     
+    private func buildSequenceMaps() {
+        allowedNext.removeAll()
+        for config in sequenceConfigs {
+            let list = config.order
+            for (i, name) in list.enumerated() where i < list.count - 1 {
+                let nextName = list[i + 1]
+                // forward always allowed
+                allowedNext[name, default: []].insert(nextName)
+                // backward only if bidirectional
+                if config.bidirectional {
+                    allowedNext[nextName, default: []].insert(name)
+                }
+            }
+        }
+    }
 
+    private func isTapAllowed(_ nodeName: String) -> Bool {
+        // 0️⃣ Always allow un‑selecting
+        if selectedNodes.contains(where: { $0.name == nodeName }) {
+            return true
+        }
+
+        // 1️⃣ Find the config and index for this node
+        guard let config = sequenceConfigs.first(where: { $0.order.contains(nodeName) }),
+              let idx    = config.order.firstIndex(of: nodeName)
+        else {
+            return true  // not part of any sequence → free
+        }
+
+        // 2️⃣ What’s already selected in this group?
+        let selectedInGroup = selectedNodes
+            .compactMap { $0.name }
+            .filter    { config.order.contains($0) }
+
+        // 3️⃣ What’s selected in the tied group (if any)?
+        var selectedInTied: [String] = []
+        if let tiedName = config.tiedGroup,
+           let tiedConfig = sequenceConfigs.first(where: { $0.group == tiedName }) {
+            selectedInTied = selectedNodes
+                .compactMap { $0.name }
+                .filter    { tiedConfig.order.contains($0) }
+        }
+
+        // 4️⃣ If this group hasn’t started yet…
+        if selectedInGroup.isEmpty {
+            // 4a. other group started → enforce matching index
+            if !selectedInTied.isEmpty,
+               let tiedName = config.tiedGroup,
+               let tiedConfig = sequenceConfigs.first(where: { $0.group == tiedName }) {
+                let requiredNode = tiedConfig.order[idx]
+                return selectedInTied.contains(requiredNode)
+            }
+            // 4b. otherwise free first pick
+            return true
+        }
+
+        // 5️⃣ Once started → only adjacent via allowedNext
+        for name in selectedInGroup {
+            if allowedNext[name]?.contains(nodeName) == true {
+                return true
+            }
+        }
+
+        // 6️⃣ Everything else is rejected
+        return false
+    }
+
+    
     private func loadModel(modelBytes: Data) throws {
         NSLog("Received modelBytes with size: \(modelBytes.count) bytes")
         let firstBytes = modelBytes.prefix(16).map { String(format: "%02x", $0) }.joined(separator: " ")
@@ -494,6 +591,12 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
 
         guard let nameNode = targetNode, let nodeName = nameNode.name else { return }
         guard let geometryNode = findGeometryNode(in: nameNode) else { return }
+        
+        guard isTapAllowed(nodeName) else {
+            NSLog("Tap rejected by sequence rule: \(nodeName)")
+            eventSink?( ["event": "selectionRejected", "name": nodeName] )
+            return
+        }
 
         // If the node is cached, remove from cache AND unselect
         if enableCache, let cacheMgr = cacheManager, cacheMgr.isCached(nodeName) {

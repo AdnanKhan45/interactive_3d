@@ -54,6 +54,7 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
     bool enableCache = false,
     List<double>? cacheColor,
     bool clearSelectionsOnHighlight = false,
+    final List<SequenceConfig>? selectionSequence
   }) async {
     Uint8List modelBytes;
     String modelName;
@@ -93,6 +94,9 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
       'enableCache': enableCache,
       'cacheColor': cacheColor,
       'clearSelectionsOnHighlight': clearSelectionsOnHighlight,
+      'selectionSequence': selectionSequence
+          ?.map((c) => c.toJson())
+          .toList(),
     };
 
     await _methodChannel.invokeMethod('loadModel', args);
