@@ -31,7 +31,8 @@ class Interactive3DCacheManager {
     // Persists cache to disk
     private func saveCache() {
         userDefaults.set(Array(cachedEntities), forKey: cacheKey)
-        userDefaults.synchronize()
+        // Note: synchronize() is deprecated and no longer needed in modern iOS
+        // UserDefaults automatically synchronizes periodically
         onCacheChanged?(cachedEntities)
     }
 
@@ -51,7 +52,7 @@ class Interactive3DCacheManager {
     func clearCache() {
         cachedEntities.removeAll()
         userDefaults.removeObject(forKey: cacheKey)
-        userDefaults.synchronize()
+        // Note: synchronize() is deprecated and no longer needed
         onCacheChanged?(cachedEntities)
     }
 

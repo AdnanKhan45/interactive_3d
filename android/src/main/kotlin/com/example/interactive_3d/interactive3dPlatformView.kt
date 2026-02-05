@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.MutableContextWrapper
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import com.google.android.filament.utils.Utils
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel
@@ -84,7 +85,26 @@ class Interactive3dPlatformView(
     }
 
     // This method is called when the view is destroyed
-    override fun dispose() {}
+    override fun dispose() {
+        Log.d(TAG, "Interactive3dPlatformView dispose() called - cleaning up resources")
+
+        // 1. Clear event sink to stop event stream
+        eventSink = null
+
+        // 2. Remove method channel handler to break strong reference
+        methodChannel.setMethodCallHandler(null)
+
+        // 3. Remove stream handler
+        eventChannel.setStreamHandler(null)
+
+        // 4. Remove all pending handler callbacks to prevent memory leaks
+        mainHandler.removeCallbacksAndMessages(null)
+
+        // 5. Destroy the custom view and its resources
+        customView.cleanup()
+
+        Log.d(TAG, "Interactive3dPlatformView cleanup completed")
+    }
 
     // This method is called when Flutter sends a message to the platform
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {

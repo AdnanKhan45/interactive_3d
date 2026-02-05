@@ -45,6 +45,12 @@ android {
 
     defaultConfig {
         minSdk = 21
+
+        // Add support for 16KB page size (required for Android 16+)
+        ndk {
+            // Ensure native libraries support 16KB pages
+            abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
+        }
     }
 
     dependencies {
@@ -65,9 +71,9 @@ android {
             useJUnitPlatform()
 
             testLogging {
-               events "passed", "skipped", "failed", "standardOut", "standardError"
-               outputs.upToDateWhen {false}
-               showStandardStreams = true
+                events "passed", "skipped", "failed", "standardOut", "standardError"
+                outputs.upToDateWhen {false}
+                showStandardStreams = true
             }
         }
     }

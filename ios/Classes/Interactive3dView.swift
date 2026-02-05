@@ -80,6 +80,69 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
     func view() -> UIView {
         return scnView
     }
+    
+    // MARK: - Cleanup and Memory Management
+    
+    deinit {
+        NSLog("Interactive3DPlatformView deinit called - cleaning up resources")
+        cleanup()
+    }
+    
+    /// Comprehensive cleanup of all resources to prevent memory leaks
+    private func cleanup() {
+        // 1. Remove gesture recognizers to break reference cycles
+        if let gestures = scnView.gestureRecognizers {
+            for gesture in gestures {
+                scnView.removeGestureRecognizer(gesture)
+            }
+        }
+        NSLog("Removed gesture recognizers")
+        
+        // 2. Clear event sink to stop event stream
+        eventSink = nil
+        
+        // 3. Remove method channel handler to break strong reference
+        methodChannel.setMethodCallHandler(nil)
+        
+        // 4. Remove stream handler
+        eventChannel.setStreamHandler(nil)
+        NSLog("Cleared channels")
+        
+        // 5. Clear all selection state
+        selectedNodes.removeAll()
+        
+        // 6. Clear all cached materials and opacities
+        originalMaterials.removeAll()
+        nodeOpacities.removeAll()
+        NSLog("Cleared selection and material dictionaries")
+        
+        // 7. Clear sequence configs
+        sequenceConfigs.removeAll()
+        allowedNext.removeAll()
+        startNodes.removeAll()
+        
+        // 8. Clear cache manager (releases UserDefaults references)
+        cacheManager = nil
+        
+        // 9. Remove all nodes from the scene to release resources
+        if let scene = scnView.scene {
+            scene.rootNode.enumerateChildNodes { (node, stop) in
+                node.removeFromParentNode()
+            }
+            scene.rootNode.geometry = nil
+            scene.background.contents = nil
+            scene.lightingEnvironment.contents = nil
+            NSLog("Cleared scene nodes and resources")
+        }
+        
+        // 10. Clear the scene from the view
+        scnView.scene = nil
+        
+        // 11. Stop rendering to release GPU resources
+        scnView.stop(nil)
+        
+        NSLog("Interactive3DPlatformView cleanup completed")
+    }
 
     private func handleMethodCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
@@ -336,10 +399,46 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
     }
 
     
+    /// Cleans up the previous model's resources before loading a new one
+    /// This prevents memory accumulation across multiple model loads
+    private func cleanupPreviousModel() {
+        // 1. Clear selections - this is important to release node references
+        selectedNodes.removeAll()
+        
+        // 2. Clear all material backups - THIS IS THE KEY FIX FOR MEMORY LEAK
+        // The originalMaterials dictionary was accumulating materials indefinitely
+        originalMaterials.removeAll()
+        NSLog("Cleared \(originalMaterials.count) original materials")
+        
+        // 3. Clear node opacities tracking
+        nodeOpacities.removeAll()
+        
+        // 4. Remove all nodes from current scene before replacing it
+        if let currentScene = scnView.scene {
+            currentScene.rootNode.enumerateChildNodes { (node, _) in
+                // Release geometry and materials
+                node.geometry = nil
+                node.removeFromParentNode()
+            }
+            // Clear scene properties
+            currentScene.background.contents = nil
+            currentScene.lightingEnvironment.contents = nil
+            NSLog("Removed all nodes from previous scene")
+        }
+        
+        // 5. Clear pending preselected entities
+        pendingPreselectedEntities = nil
+        
+        NSLog("Previous model cleanup completed")
+    }
+    
     private func loadModel(modelBytes: Data) throws {
         NSLog("Received modelBytes with size: \(modelBytes.count) bytes")
         let firstBytes = modelBytes.prefix(16).map { String(format: "%02x", $0) }.joined(separator: " ")
         NSLog("First 16 bytes: \(firstBytes)")
+        
+        // CRITICAL: Clean up previous model resources before loading new one
+        cleanupPreviousModel()
 
         let scene: SCNScene
         do {
@@ -705,7 +804,7 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             // Important: assign a *copy* to break pointer sharing!
             geometry.materials = [originalMaterial.copy() as! SCNMaterial]
             NSLog("Restored original material for: \(node.name ?? "Unnamed")")
-            // Remove the reference so future highlights cache the next original
+            // CRITICAL: Remove the reference immediately to prevent memory accumulation
             originalMaterials.removeValue(forKey: node)
         } else {
             NSLog("No original material found for: \(node.name ?? "Unnamed")")

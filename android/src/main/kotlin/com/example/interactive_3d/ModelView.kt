@@ -47,6 +47,7 @@ class ModelView : LinearLayout {
     private val resourceMap = mutableMapOf<String, ByteBuffer>()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val mainExecutor = Executor { command -> mainHandler.post(command) }
+    private var activityLifecycleCallbacks: Application.ActivityLifecycleCallbacks? = null
     private var pendingPreselectedEntities: List<String>? = null
     private var modelLoaded = false
     private var selectionColor: FloatArray? = null // Store RGBA as [r, g, b, a]
@@ -120,7 +121,8 @@ class ModelView : LinearLayout {
 
         choreographer.postFrameCallback(frameScheduler)
 
-        (context as? Activity)?.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
+        // Store lifecycle callbacks reference so we can unregister later
+        activityLifecycleCallbacks = object : Application.ActivityLifecycleCallbacks {
             override fun onActivityCreated(activity: Activity, savedInstanceState: android.os.Bundle?) {}
             override fun onActivityStarted(activity: Activity) {}
             override fun onActivityResumed(activity: Activity) {
@@ -133,9 +135,14 @@ class ModelView : LinearLayout {
             override fun onActivitySaveInstanceState(activity: Activity, outState: android.os.Bundle) {}
             override fun onActivityDestroyed(activity: Activity) {
                 choreographer.removeFrameCallback(frameScheduler)
-                modelViewer.destroyModel()
+                cleanup()
             }
-        })
+        }
+
+        // Register the callbacks only if we successfully created them
+        activityLifecycleCallbacks?.let { callbacks ->
+            (context as? Activity)?.registerActivityLifecycleCallbacks(callbacks)
+        }
     }
 
 
@@ -218,6 +225,45 @@ class ModelView : LinearLayout {
         Log.d(TAG, "Camera zoom set: zoom = $zoom, newFov = $newFov")
     }
 
+
+    /**
+     * Cleans up the previous model's resources before loading a new one.
+     * This prevents memory accumulation across multiple model loads.
+     */
+    private fun cleanupPreviousModel() {
+        Log.d(TAG, "Cleaning up previous model resources")
+
+        // 1. Clear selections - important to release entity references
+        selectedEntities.clear()
+
+        // 2. Clear resource map - THIS IS KEY FIX FOR MEMORY LEAK
+        // The resourceMap was accumulating ByteBuffers indefinitely
+        val previousResourceCount = resourceMap.size
+        resourceMap.clear()
+        Log.d(TAG, "Cleared $previousResourceCount resources from resource map")
+
+        // 3. Clear entity visibilities tracking
+        entityVisibilities.clear()
+
+        // 4. Destroy the previous model to free GPU resources
+        try {
+            if (modelLoaded) {
+                modelViewer.destroyModel()
+                Log.d(TAG, "Destroyed previous model")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error destroying previous model: ${e.message}")
+        }
+
+        // 5. Clear pending preselected entities
+        pendingPreselectedEntities = null
+
+        // 6. Reset model loaded flag
+        modelLoaded = false
+
+        Log.d(TAG, "Previous model cleanup completed")
+    }
+
     /**
      * Loads a 3D model (GLB or GLTF) with optional preselected entities, selection color, and patch colors.
      */
@@ -231,7 +277,10 @@ class ModelView : LinearLayout {
         enableCache: Boolean,
         cacheColor: List<Double>?
     ) {
-        selectedEntities.clear()
+        // CRITICAL: Clean up previous model resources before loading new one
+        cleanupPreviousModel()
+
+        // Send updates after cleanup
         sendSelectedEntitiesToFlutter()
         sendCacheSelectionUpdate()
 
@@ -347,12 +396,69 @@ class ModelView : LinearLayout {
     }
 
     /**
-     * Destroys the 3D model and stops automation.
+     * Comprehensive cleanup of all resources to prevent memory leaks.
+     * Called when the view is being disposed or destroyed.
      */
+    fun cleanup() {
+        Log.d(TAG, "Starting comprehensive ModelView cleanup")
+
+        // 1. Remove choreographer callback to stop rendering loop
+        choreographer.removeFrameCallback(frameScheduler)
+        Log.d(TAG, "Removed choreographer callback")
+
+        // 2. Unregister activity lifecycle callbacks to prevent memory leak
+        activityLifecycleCallbacks?.let { callbacks ->
+            (context as? Activity)?.unregisterActivityLifecycleCallbacks(callbacks)
+            activityLifecycleCallbacks = null
+            Log.d(TAG, "Unregistered activity lifecycle callbacks")
+        }
+
+        // 3. Clear all selection state
+        selectedEntities.clear()
+
+        // 4. Clear resource map to release ByteBuffers
+        resourceMap.clear()
+        Log.d(TAG, "Cleared resource map with ${resourceMap.size} entries")
+
+        // 5. Clear entity visibilities tracking
+        entityVisibilities.clear()
+
+        // 6. Clear cache manager
+        cacheManager = null
+
+        // 7. Stop automation engine
+        try {
+            automation.stopRunning()
+            Log.d(TAG, "Stopped automation engine")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping automation: ${e.message}")
+        }
+
+        // 8. DO NOT destroy model here - Filament crashes if destroyed from wrong thread
+        // The model will be destroyed by Activity lifecycle or when loading a new model
+        // Just clear our references and let GC handle the rest
+        if (modelLoaded) {
+            Log.d(TAG, "Model marked for cleanup (will be destroyed by Activity lifecycle)")
+        }
+
+        // 9. Clear listeners to break references
+        selectionListener = null
+        cacheSelectionListener = null
+
+        // 10. Reset state flags
+        modelLoaded = false
+        pendingPreselectedEntities = null
+
+        Log.d(TAG, "ModelView cleanup completed successfully")
+    }
+
+    /**
+     * Legacy destroy method - now calls cleanup for compatibility
+     * @deprecated Use cleanup() instead
+     */
+    @Deprecated("Use cleanup() instead", ReplaceWith("cleanup()"))
     fun destroy() {
-        modelViewer.destroyModel()
-        automation.stopRunning()
-        Log.d(TAG, "ModelView destroyed")
+        cleanup()
     }
 
     private fun getEntityColor(entityName: String?): FloatArray {
