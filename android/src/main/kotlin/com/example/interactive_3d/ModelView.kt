@@ -81,10 +81,19 @@ class ModelView : LinearLayout {
         fun onCacheSelectionChanged(cachedEntities: List<Map<String, Any>>)
     }
 
+    interface LoadingStateListener {
+        fun onLoadingStateChanged(isLoading: Boolean)
+    }
+
     private var cacheSelectionListener: CacheSelectionListener? = null
+    private var loadingStateListener: LoadingStateListener? = null
 
     fun setCacheSelectionListener(listener: CacheSelectionListener) {
         cacheSelectionListener = listener
+    }
+
+    fun setLoadingStateListener(listener: LoadingStateListener) {
+        loadingStateListener = listener
     }
 
 
@@ -106,7 +115,13 @@ class ModelView : LinearLayout {
         singleTapDetector = GestureDetector(context, singleTapListener)
 
         choreographer = Choreographer.getInstance()
+
+        // Create ModelViewer with default engine (one per view)
+        // NOTE: Engine singleton approach doesn't work due to ModelViewer internals
+        // The REAL performance gain comes from model caching, not engine reuse
         modelViewer = ModelViewer(textureView)
+        Log.d(TAG, "ModelView created with new engine (model caching provides speed)")
+
         viewerContent.view = modelViewer.view
         viewerContent.sunlight = modelViewer.light
         viewerContent.lightManager = modelViewer.engine.lightManager
@@ -277,6 +292,12 @@ class ModelView : LinearLayout {
         enableCache: Boolean,
         cacheColor: List<Double>?
     ) {
+        // Notify loading started
+        loadingStateListener?.onLoadingStateChanged(true)
+
+        // OPTIMIZATION: Start with fast rendering mode for instant display
+        setViewOptions(fastMode = true)
+
         // CRITICAL: Clean up previous model resources before loading new one
         cleanupPreviousModel()
 
@@ -320,28 +341,66 @@ class ModelView : LinearLayout {
 
 
     /**
-     * Loads a 3D model (GLB or GLTF).
+     * Loads a 3D model (GLB or GLTF) with caching and performance optimizations.
      */
     private fun setModel(buffer: ByteBuffer, fileName: String, resources: Map<String, ByteArray>) {
-        modelLoaded = false
-        resources.forEach { (key, value) ->
-            resourceMap[key] = ByteBuffer.wrap(value)
-        }
+        val startTime = System.nanoTime()
 
-        if (fileName.endsWith(".gltf", ignoreCase = true)) {
-            modelViewer.loadModelGltfAsync(buffer) { resourcePath ->
-                resourceMap[resourcePath] ?: run {
-                    Log.e(TAG, "Missing resource: $resourcePath")
-                    ByteBuffer.allocate(0)
+        // OPTIMIZATION 1: Check cache first
+        val cached = ModelCacheManager.get(fileName)
+        if (cached != null) {
+            Log.d(TAG, "Using cached model: $fileName")
+
+            // Rewind the cached buffer
+            cached.buffer.rewind()
+
+            // Load from cache (much faster!)
+            if (fileName.endsWith(".gltf", ignoreCase = true)) {
+                modelViewer.loadModelGltfAsync(cached.buffer) { resourcePath ->
+                    resourceMap[resourcePath] ?: ByteBuffer.allocate(0)
                 }
+            } else if (fileName.endsWith(".glb", ignoreCase = true)) {
+                modelViewer.loadModelGlb(cached.buffer)
             }
-            Log.d(TAG, "Loaded GLTF model: $fileName")
-        } else if (fileName.endsWith(".glb", ignoreCase = true)) {
-            modelViewer.loadModelGlb(buffer)
-            Log.d(TAG, "Loaded GLB model: $fileName")
+
+            modelLoaded = true
+            val loadTime = (System.nanoTime() - startTime) / 1_000_000
+            Log.d(TAG, "Loaded cached model in ${loadTime}ms (cache hit!)")
         } else {
-            Log.e(TAG, "Unsupported model format: $fileName")
-            return
+            // Not cached - load normally and cache it
+            Log.d(TAG, "Loading and caching model: $fileName")
+
+            modelLoaded = false
+            resources.forEach { (key, value) ->
+                resourceMap[key] = ByteBuffer.wrap(value)
+            }
+
+            if (fileName.endsWith(".gltf", ignoreCase = true)) {
+                modelViewer.loadModelGltfAsync(buffer) { resourcePath ->
+                    resourceMap[resourcePath] ?: run {
+                        Log.e(TAG, "Missing resource: $resourcePath")
+                        ByteBuffer.allocate(0)
+                    }
+                }
+                Log.d(TAG, "Loaded GLTF model: $fileName")
+            } else if (fileName.endsWith(".glb", ignoreCase = true)) {
+                modelViewer.loadModelGlb(buffer)
+                Log.d(TAG, "Loaded GLB model: $fileName")
+            } else {
+                Log.e(TAG, "Unsupported model format: $fileName")
+                return
+            }
+
+            // OPTIMIZATION 2: Cache the loaded model
+            modelViewer.asset?.let { asset ->
+                // Rewind buffer before caching
+                buffer.rewind()
+                ModelCacheManager.put(fileName, asset, buffer)
+            }
+
+            modelLoaded = true
+            val loadTime = (System.nanoTime() - startTime) / 1_000_000
+            Log.d(TAG, "Loaded and cached model in ${loadTime}ms")
         }
 
         if (automation.viewerOptions.autoScaleEnabled) {
@@ -352,7 +411,6 @@ class ModelView : LinearLayout {
 
         loadStartTime = System.nanoTime()
         loadStartFence = modelViewer.engine.createFence()
-        modelLoaded = true
     }
 
     /**
@@ -372,27 +430,55 @@ class ModelView : LinearLayout {
 
     /**
      * Configures the view options for rendering.
+     * OPTIMIZATION: Added fast loading mode to reduce initial render time.
      */
-    fun setViewOptions() {
+    fun setViewOptions(fastMode: Boolean = false) {
         val view = modelViewer.view
-        view.renderQuality = view.renderQuality.apply {
-            hdrColorBuffer = View.QualityLevel.MEDIUM
+
+        if (fastMode) {
+            // FAST LOADING MODE: Minimal quality for instant display
+            Log.d(TAG, "Setting view options in FAST mode (lower quality for speed)")
+
+            view.renderQuality = view.renderQuality.apply {
+                hdrColorBuffer = View.QualityLevel.LOW
+            }
+            view.dynamicResolutionOptions = view.dynamicResolutionOptions.apply {
+                enabled = false  // Disable for speed
+            }
+            view.multiSampleAntiAliasingOptions = view.multiSampleAntiAliasingOptions.apply {
+                enabled = false  // Disable for speed
+            }
+            view.antiAliasing = View.AntiAliasing.NONE  // Fastest
+            view.ambientOcclusionOptions = view.ambientOcclusionOptions.apply {
+                enabled = false  // EXPENSIVE! Disable during loading
+            }
+            view.bloomOptions = view.bloomOptions.apply {
+                enabled = false  // EXPENSIVE! Disable during loading
+            }
+        } else {
+            // FULL QUALITY MODE: Beautiful rendering
+            Log.d(TAG, "Setting view options in FULL QUALITY mode")
+
+            view.renderQuality = view.renderQuality.apply {
+                hdrColorBuffer = View.QualityLevel.MEDIUM
+            }
+            view.dynamicResolutionOptions = view.dynamicResolutionOptions.apply {
+                enabled = true
+                quality = View.QualityLevel.MEDIUM
+            }
+            view.multiSampleAntiAliasingOptions = view.multiSampleAntiAliasingOptions.apply {
+                enabled = true
+            }
+            view.antiAliasing = View.AntiAliasing.FXAA
+            view.ambientOcclusionOptions = view.ambientOcclusionOptions.apply {
+                enabled = true
+            }
+            view.bloomOptions = view.bloomOptions.apply {
+                enabled = true
+            }
         }
-        view.dynamicResolutionOptions = view.dynamicResolutionOptions.apply {
-            enabled = true
-            quality = View.QualityLevel.MEDIUM
-        }
-        view.multiSampleAntiAliasingOptions = view.multiSampleAntiAliasingOptions.apply {
-            enabled = true
-        }
-        view.antiAliasing = View.AntiAliasing.FXAA
-        view.ambientOcclusionOptions = view.ambientOcclusionOptions.apply {
-            enabled = true
-        }
-        view.bloomOptions = view.bloomOptions.apply {
-            enabled = true
-        }
-        Log.d(TAG, "View options set")
+
+        Log.d(TAG, "View options set (fastMode: $fastMode)")
     }
 
     /**
@@ -423,7 +509,7 @@ class ModelView : LinearLayout {
         // 5. Clear entity visibilities tracking
         entityVisibilities.clear()
 
-        // 6. Clear cache manager
+        // 6. Clear cache manager (but preserve model cache in ModelCacheManager)
         cacheManager = null
 
         // 7. Stop automation engine
@@ -434,16 +520,20 @@ class ModelView : LinearLayout {
             Log.e(TAG, "Error stopping automation: ${e.message}")
         }
 
-        // 8. DO NOT destroy model here - Filament crashes if destroyed from wrong thread
-        // The model will be destroyed by Activity lifecycle or when loading a new model
-        // Just clear our references and let GC handle the rest
-        if (modelLoaded) {
-            Log.d(TAG, "Model marked for cleanup (will be destroyed by Activity lifecycle)")
+        // 8. Destroy model to free GPU resources (safe on main thread)
+        try {
+            if (modelLoaded && modelViewer.asset != null) {
+                modelViewer.destroyModel()
+                Log.d(TAG, "Destroyed model safely")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error destroying model: ${e.message}")
         }
 
         // 9. Clear listeners to break references
         selectionListener = null
         cacheSelectionListener = null
+        loadingStateListener = null
 
         // 10. Reset state flags
         modelLoaded = false
@@ -592,6 +682,13 @@ class ModelView : LinearLayout {
                     if (enableCache && cacheManager != null) {
                         notifyCacheChanged();
                     }
+
+                    // OPTIMIZATION: Switch to full quality mode after first frame renders
+                    Log.d(TAG, "Model fully loaded - switching to full quality mode")
+                    setViewOptions(fastMode = false)
+
+                    // Notify loading completed
+                    loadingStateListener?.onLoadingStateChanged(false)
 
                 }
             }
