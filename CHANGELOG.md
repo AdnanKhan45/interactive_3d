@@ -1,5 +1,13 @@
 ## 1.2.2
 
+* 7th release of `interactive_3d`.
+- Feature:
+    - Android & iOS memory leaks lead to crash fixes
+    - Performance Optimized on Android
+    - Example UI updates
+
+## 1.2.2
+
 * 6th release of `interactive_3d`.
 - Feature:
   - Control Visibility of different parts of model using Interactive3dController.

@@ -64,23 +64,23 @@ class HomePage extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 24),
+            // const SizedBox(height: 24),
 
             // Memory Test Button
-            _ExampleButton(
-              icon: Icons.memory,
-              title: 'Memory Leak Test',
-              description: 'Test memory management by navigating back and forth',
-              color: Colors.red,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const MemoryTestPage(),
-                  ),
-                );
-              },
-            ),
+            // _ExampleButton(
+            //   icon: Icons.memory,
+            //   title: 'Memory Leak Test',
+            //   description: 'Test memory management by navigating back and forth',
+            //   color: Colors.red,
+            //   onTap: () {
+            //     Navigator.push(
+            //       context,
+            //       MaterialPageRoute(
+            //         builder: (context) => const MemoryTestPage(),
+            //       ),
+            //     );
+            //   },
+            // ),
             const SizedBox(height: 12),
 
             // GLB Example Button
@@ -100,39 +100,6 @@ class HomePage extends StatelessWidget {
             ),
             const SizedBox(height: 24),
 
-            // Info Section
-            const Spacer(),
-            Card(
-              color: Colors.blue.shade50,
-              child: const Padding(
-                padding: EdgeInsets.all(12.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.info_outline, color: Colors.blue, size: 20),
-                        SizedBox(width: 8),
-                        Text(
-                          'Testing Tips',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue,
-                          ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      '• Use Memory Test to verify leak fixes\n'
-                          '• GLB Example shows all plugin features\n'
-                          '• Check console for detailed logs',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-            ),
           ],
         ),
       ),
