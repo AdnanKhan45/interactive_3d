@@ -1,3 +1,9 @@
+## 1.2.4
+
+* 8th release of `interactive_3d`.
+- Feature:
+    - Android Memory Performance Optimized
+
 ## 1.2.3
 
 * 7th release of `interactive_3d`.
