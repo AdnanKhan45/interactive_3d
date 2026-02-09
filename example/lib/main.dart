@@ -64,7 +64,7 @@ class HomePage extends StatelessWidget {
                 ),
               ),
             ),
-            // const SizedBox(height: 24),
+            const SizedBox(height: 24),
 
             // Memory Test Button
             // _ExampleButton(
@@ -81,7 +81,7 @@ class HomePage extends StatelessWidget {
             //     );
             //   },
             // ),
-            const SizedBox(height: 12),
+            // const SizedBox(height: 12),
 
             // GLB Example Button
             _ExampleButton(

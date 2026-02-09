@@ -346,15 +346,9 @@ class ModelView : LinearLayout {
     private fun setModel(buffer: ByteBuffer, fileName: String, resources: Map<String, ByteArray>) {
         val startTime = System.nanoTime()
 
-        // OPTIMIZATION 1: Check cache first
         val cached = ModelCacheManager.get(fileName)
         if (cached != null) {
-            Log.d(TAG, "Using cached model: $fileName")
-
-            // Rewind the cached buffer
             cached.buffer.rewind()
-
-            // Load from cache (much faster!)
             if (fileName.endsWith(".gltf", ignoreCase = true)) {
                 modelViewer.loadModelGltfAsync(cached.buffer) { resourcePath ->
                     resourceMap[resourcePath] ?: ByteBuffer.allocate(0)
@@ -362,15 +356,18 @@ class ModelView : LinearLayout {
             } else if (fileName.endsWith(".glb", ignoreCase = true)) {
                 modelViewer.loadModelGlb(cached.buffer)
             }
-
             modelLoaded = true
-            val loadTime = (System.nanoTime() - startTime) / 1_000_000
-            Log.d(TAG, "Loaded cached model in ${loadTime}ms (cache hit!)")
-        } else {
-            // Not cached - load normally and cache it
-            Log.d(TAG, "Loading and caching model: $fileName")
 
+            // ✅ CRITICAL: Release resources AFTER model is loaded to GPU
+            mainHandler.postDelayed({
+                resourceMap.clear()
+                Log.d(TAG, "Released resource buffers after GPU upload")
+            }, 500)  // Small delay to ensure GPU upload completes
+
+        } else {
             modelLoaded = false
+
+            // Temporarily store resources for loading
             resources.forEach { (key, value) ->
                 resourceMap[key] = ByteBuffer.wrap(value)
             }
@@ -382,25 +379,22 @@ class ModelView : LinearLayout {
                         ByteBuffer.allocate(0)
                     }
                 }
-                Log.d(TAG, "Loaded GLTF model: $fileName")
             } else if (fileName.endsWith(".glb", ignoreCase = true)) {
                 modelViewer.loadModelGlb(buffer)
-                Log.d(TAG, "Loaded GLB model: $fileName")
-            } else {
-                Log.e(TAG, "Unsupported model format: $fileName")
-                return
             }
 
-            // OPTIMIZATION 2: Cache the loaded model
             modelViewer.asset?.let { asset ->
-                // Rewind buffer before caching
                 buffer.rewind()
                 ModelCacheManager.put(fileName, asset, buffer)
             }
 
             modelLoaded = true
-            val loadTime = (System.nanoTime() - startTime) / 1_000_000
-            Log.d(TAG, "Loaded and cached model in ${loadTime}ms")
+
+            // ✅ CRITICAL: Release resources after model is on GPU
+            mainHandler.postDelayed({
+                resourceMap.clear()
+                Log.d(TAG, "Released ${resourceMap.size} resource buffers")
+            }, 500)
         }
 
         if (automation.viewerOptions.autoScaleEnabled) {
@@ -488,31 +482,20 @@ class ModelView : LinearLayout {
     fun cleanup() {
         Log.d(TAG, "Starting comprehensive ModelView cleanup")
 
-        // 1. Remove choreographer callback to stop rendering loop
         choreographer.removeFrameCallback(frameScheduler)
         Log.d(TAG, "Removed choreographer callback")
 
-        // 2. Unregister activity lifecycle callbacks to prevent memory leak
         activityLifecycleCallbacks?.let { callbacks ->
             (context as? Activity)?.unregisterActivityLifecycleCallbacks(callbacks)
             activityLifecycleCallbacks = null
             Log.d(TAG, "Unregistered activity lifecycle callbacks")
         }
 
-        // 3. Clear all selection state
         selectedEntities.clear()
-
-        // 4. Clear resource map to release ByteBuffers
-        resourceMap.clear()
-        Log.d(TAG, "Cleared resource map with ${resourceMap.size} entries")
-
-        // 5. Clear entity visibilities tracking
+        resourceMap.clear()  // ✅ Release resource buffers
         entityVisibilities.clear()
-
-        // 6. Clear cache manager (but preserve model cache in ModelCacheManager)
         cacheManager = null
 
-        // 7. Stop automation engine
         try {
             automation.stopRunning()
             Log.d(TAG, "Stopped automation engine")
@@ -520,7 +503,6 @@ class ModelView : LinearLayout {
             Log.e(TAG, "Error stopping automation: ${e.message}")
         }
 
-        // 8. Destroy model to free GPU resources (safe on main thread)
         try {
             if (modelLoaded && modelViewer.asset != null) {
                 modelViewer.destroyModel()
@@ -530,12 +512,24 @@ class ModelView : LinearLayout {
             Log.e(TAG, "Error destroying model: ${e.message}")
         }
 
-        // 9. Clear listeners to break references
+        // ✅ CRITICAL: Destroy the engine and renderer to free GPU resources
+        try {
+            modelViewer.renderer?.let { renderer ->
+                // Clear render target
+                modelViewer.view.renderTarget = null
+            }
+
+            // Destroy engine (this releases ALL GPU resources)
+            modelViewer.engine?.destroy()
+            Log.d(TAG, "Destroyed Filament engine and freed GPU memory")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error destroying engine: ${e.message}")
+        }
+
         selectionListener = null
         cacheSelectionListener = null
         loadingStateListener = null
 
-        // 10. Reset state flags
         modelLoaded = false
         pendingPreselectedEntities = null
 
