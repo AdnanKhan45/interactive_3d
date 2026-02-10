@@ -788,7 +788,19 @@ class FilamentTextureRenderer(
         }
 
         zoomLevel *= scaleFactor
-        zoomLevel = zoomLevel.coerceIn(0.3f, 3.0f)
+        zoomLevel = zoomLevel.coerceIn(0.5f, 3.0f)
+
+        // Re-lock render quality on every zoom gesture — prevents blur during pinch
+        val v = view ?: return
+        val dynRes = v.dynamicResolutionOptions
+        dynRes.enabled = false
+        dynRes.quality = View.QualityLevel.HIGH
+        v.dynamicResolutionOptions = dynRes
+
+        val rq = v.renderQuality
+        rq.hdrColorBuffer = View.QualityLevel.HIGH
+        v.renderQuality = rq
+
         updateCameraPosition()
     }
 
