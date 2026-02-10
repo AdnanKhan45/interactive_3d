@@ -3,6 +3,10 @@ import 'interactive_3d.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
+/// Platform interface for the Interactive3d plugin.
+///
+/// This interface defines the contract for texture-based 3D rendering
+/// using Flutter's SurfaceProducer API.
 abstract class Interactive3dPlatform extends PlatformInterface {
   Interactive3dPlatform() : super(token: _token);
 
@@ -12,57 +16,83 @@ abstract class Interactive3dPlatform extends PlatformInterface {
     PlatformInterface.verifyToken(instance, _token);
   }
 
-  /// Method to load the model from assets or network.
-  /// [resources] is empty for .glb models and populated for .gltf models.
+  /// Creates a new texture for 3D rendering.
+  /// Returns a map containing 'textureId'.
+  Future<Map<String, dynamic>> createTexture({
+    required int width,
+    required int height,
+  });
+
+  /// Disposes a texture and releases all associated resources.
+  Future<void> disposeTexture(int textureId);
+
+  /// Loads a 3D model into the specified texture.
   Future<void> loadModel({
+    required int textureId,
     String? modelPath,
     String? modelUrl,
     required Map<String, ByteData> resources,
     List<String>? preselectedEntities,
     List<double>? selectionColor,
-    List<PatchColor>? patchColors, // Add patchColors
+    List<PatchColor>? patchColors,
     bool enableCache = false,
     List<double>? cacheColor,
     bool clearSelectionsOnHighlight = false,
-    final List<SequenceConfig>? selectionSequence
+    List<SequenceConfig>? selectionSequence,
   });
 
-  /// Method to load the environment from assets or network URLs.
+  /// Loads environment lighting into the specified texture.
   Future<void> loadEnvironment({
+    required int textureId,
     String? iblPath,
     String? iblUrl,
     String? skyboxPath,
     String? skyboxUrl,
   });
 
-  /// Method to set the camera position.
-  Future<void> setCameraZoomLevel(double zoom);
-
-  /// Method to set the camera position.
-  Future<void> updatePartGroupConfig({required bool isVisible, required ModelPartGroup group});
-
-  /// Method to unselect entities in the 3D model.
-  Future<void> unselectEntities({List<int>? entityIds});
-
-  /// Method to clear all selected entities in the 3D model.
-  Future<void> clearCache();
-
-  /// Method to refresh the cache highlights for a specific view.
-  Future<void> refreshCacheHighlights();
-
-  /// Method to clear specific cached entities
-  Future<void> removeFromCache(List<String> names);
-
-  // Load HDR or EXR background for iOS
+  /// Loads HDR/EXR background for iOS.
   Future<void> loadHdrBackground({
+    required int textureId,
     String? backgroundPath,
     String? backgroundUrl,
   });
 
-  /// Stream to receive selection changes.
-  Stream<List<EntityData>> get selectionStream;
+  /// Sets the camera zoom level.
+  Future<void> setCameraZoomLevel(int textureId, double zoom);
 
-  /// Stream to receive cached selection changes.
-  Stream<List<String>> get cacheSelectionStream;
+  /// Updates visibility for a model part group.
+  Future<void> updatePartGroupConfig({
+    required int textureId,
+    required bool isVisible,
+    required ModelPartGroup group,
+  });
 
+  /// Unselects entities in the 3D model.
+  Future<void> unselectEntities({required int textureId, List<int>? entityIds});
+
+  /// Clears the selection cache.
+  Future<void> clearCache(int textureId);
+
+  /// Refreshes cache highlights.
+  Future<void> refreshCacheHighlights(int textureId);
+
+  /// Removes specific entities from cache.
+  Future<void> removeFromCache(int textureId, List<String> names);
+
+  /// Sends a touch event to the native side.
+  Future<void> onTouchEvent({
+    required int textureId,
+    required String action,
+    double? x,
+    double? y,
+    double? deltaX,
+    double? deltaY,
+    double? scale,
+  });
+
+  /// Stream to receive selection changes for a specific texture.
+  Stream<List<EntityData>> selectionStream(int textureId);
+
+  /// Stream to receive cached selection changes for a specific texture.
+  Stream<List<String>> cacheSelectionStream(int textureId);
 }

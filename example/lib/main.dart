@@ -67,21 +67,21 @@ class HomePage extends StatelessWidget {
             const SizedBox(height: 24),
 
             // Memory Test Button
-            // _ExampleButton(
-            //   icon: Icons.memory,
-            //   title: 'Memory Leak Test',
-            //   description: 'Test memory management by navigating back and forth',
-            //   color: Colors.red,
-            //   onTap: () {
-            //     Navigator.push(
-            //       context,
-            //       MaterialPageRoute(
-            //         builder: (context) => const MemoryTestPage(),
-            //       ),
-            //     );
-            //   },
-            // ),
-            // const SizedBox(height: 12),
+            _ExampleButton(
+              icon: Icons.memory,
+              title: 'Memory Leak Test',
+              description: 'Test memory management by navigating back and forth',
+              color: Colors.red,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const MemoryTestPage(),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
 
             // GLB Example Button
             _ExampleButton(

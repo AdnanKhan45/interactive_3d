@@ -7,7 +7,6 @@ import 'interactive_3d_controller.dart';
 import 'interactive_3d_method_channel.dart';
 import 'interactive_3d_platform_interface.dart';
 
-
 /// Configuration for the sequence selection of entities in the 3D model.
 class SequenceConfig {
   final String group;
@@ -60,7 +59,10 @@ class ModelPartGroup {
   }
 }
 
-/// A widget for rendering and interacting with 3D models using a native platform view.
+/// A widget for rendering and interacting with 3D models.
+///
+/// This implementation uses Flutter's Texture widget with SurfaceProducer API
+/// for high-performance rendering instead of PlatformView/AndroidView.
 class Interactive3d extends StatefulWidget {
   /// Path to the 3D model file (e.g., `.glb` or `.gltf`) to be loaded from assets.
   final String? modelPath;
@@ -85,7 +87,6 @@ class Interactive3d extends StatefulWidget {
 
   /// URL to the skybox texture file of type .hdr/.exr used for the 3D environment from the network.
   final String? iOSBackgroundEnvUrl;
-
 
   /// A list of additional resource file paths required for `.gltf` models (e.g., textures, binary files).
   /// Defaults to an empty list.
@@ -125,6 +126,12 @@ class Interactive3d extends StatefulWidget {
   /// A list of sequence configurations for selecting entities in a specific order.
   final List<SequenceConfig>? selectionSequence;
 
+  /// Background color shown while loading.
+  final Color backgroundColor;
+
+  /// Widget to show while loading.
+  final Widget? loadingWidget;
+
   /// Constructor for the `Interactive3d` widget.
   const Interactive3d({
     super.key,
@@ -147,7 +154,9 @@ class Interactive3d extends StatefulWidget {
     this.cacheColor,
     this.onCacheSelectionChanged,
     this.clearSelectionOnHighlight = false,
-    this.selectionSequence
+    this.selectionSequence,
+    this.backgroundColor = Colors.black,
+    this.loadingWidget,
   });
 
   @override
@@ -159,8 +168,14 @@ class Interactive3dState extends State<Interactive3d> {
   /// Platform-specific implementation for interacting with the 3D viewer.
   Interactive3dPlatform? _platform;
 
-  /// ID of the platform view.
-  int _viewId = -1;
+  /// The texture ID returned by the native side.
+  int? _textureId;
+
+  /// Whether the texture is being initialized.
+  bool _isInitializing = false;
+
+  /// Whether the model is loaded.
+  bool _isLoaded = false;
 
   /// Subscription to the selection stream for listening to selection changes.
   StreamSubscription<List<EntityData>>? _selectionSubscription;
@@ -168,17 +183,18 @@ class Interactive3dState extends State<Interactive3d> {
   /// Subscription to the selection stream for listening to cached selection changes.
   StreamSubscription<List<String>>? _cacheSelectionSubscription;
 
+  /// The current size of the widget.
+  Size? _currentSize;
 
   @override
   void initState() {
-    widget.controller?.attach(this);
     super.initState();
+    widget.controller?.attach(this);
   }
 
   @override
   void didUpdateWidget(Interactive3d oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Reattach the controller if it changes
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller?.detach();
       widget.controller?.attach(this);
@@ -187,83 +203,116 @@ class Interactive3dState extends State<Interactive3d> {
 
   @override
   Widget build(BuildContext context) {
-    // Render the platform-specific view (iOS or Android).
-    if (Platform.isIOS) {
-      return UiKitView(
-        viewType: 'interactive_3d',
-        onPlatformViewCreated: _onPlatformViewCreated,
-        creationParams: _creationParams(),
-        creationParamsCodec: const StandardMessageCodec(),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = Size(constraints.maxWidth, constraints.maxHeight);
+
+        // Initialize texture when we have a valid size
+        if (_textureId == null && !_isInitializing && size.width > 0 && size.height > 0) {
+          _initializeTexture(size);
+        }
+
+        // Update size if changed
+        if (_currentSize != size && _textureId != null) {
+          _currentSize = size;
+          _updateTextureSize(size);
+        }
+
+        return Container(
+          color: widget.backgroundColor,
+          child: _textureId != null
+              ? _buildTextureWidget()
+              : (widget.loadingWidget ?? const Center(child: CircularProgressIndicator())),
+        );
+      },
+    );
+  }
+
+  /// Builds the texture widget with gesture handling.
+  Widget _buildTextureWidget() {
+    return GestureDetector(
+      onTapUp: _handleTapUp,
+      onScaleStart: _handleScaleStart,
+      onScaleUpdate: _handleScaleUpdate,
+      child: Texture(textureId: _textureId!),
+    );
+  }
+
+  /// Initializes the texture on the native side.
+  Future<void> _initializeTexture(Size size) async {
+    if (_isInitializing) return;
+    _isInitializing = true;
+
+    try {
+      _platform = MethodChannelInteractive3d();
+
+      // Create texture with initial size
+      final result = await _platform!.createTexture(
+        width: size.width.toInt(),
+        height: size.height.toInt(),
       );
-    } else {
-      return AndroidView(
-        key: const ValueKey('interactive_3d'),
-        viewType: 'interactive_3d',
-        onPlatformViewCreated: _onPlatformViewCreated,
-      );
+
+      final textureId = result['textureId'] as int?;
+      if (textureId == null) {
+        throw Exception('Failed to create texture');
+      }
+
+      _textureId = textureId;
+      _currentSize = size;
+
+      if (mounted) {
+        setState(() {});
+      }
+
+      // Listen for selection changes
+      _selectionSubscription = _platform!.selectionStream(_textureId!).listen(_onSelectionChanged);
+
+      // Listen for cache selection changes
+      if (widget.onCacheSelectionChanged != null) {
+        _cacheSelectionSubscription = _platform!.cacheSelectionStream(_textureId!).listen(widget.onCacheSelectionChanged!);
+      }
+
+      // Load model and environment
+      await _loadModelAndEnvironment();
+
+      _isLoaded = true;
+
+    } catch (e) {
+      debugPrint('Error initializing texture: $e');
+    } finally {
+      _isInitializing = false;
     }
   }
 
-  /// Creates the parameters to be passed to the platform view.
-  dynamic _creationParams() {
-    return {
-      'modelPath': widget.modelPath,
-      'modelUrl': widget.modelUrl,
-      'iblPath': widget.iblPath,
-      'iblUrl': widget.iblUrl,
-      'skyboxPath': widget.skyboxPath,
-      'skyboxUrl': widget.skyboxUrl,
-      'resources': widget.resources,
-      'enableCache': widget.enableCache,
-      'cacheColor': widget.cacheColor,
-      'clearSelectionOnHighlight': widget.clearSelectionOnHighlight,
-      // For cacheKey, use modelPath or modelUrl (handled natively for uniqueness)
-      'name': widget.modelPath?.split('/').last ?? widget.modelUrl?.split('/').last,
-      'selectionSequence': widget.selectionSequence
-          ?.map((c) => c.toJson())
-          .toList(),
-    };
-  }
+  /// Loads the model and environment.
+  Future<void> _loadModelAndEnvironment() async {
+    if (_platform == null || _textureId == null) return;
 
-  /// Called when the platform view is created.
-  /// Initializes the platform interface and loads the model and environment.
-  Future<void> _onPlatformViewCreated(int id) async {
-    _viewId = id;
-    _platform = MethodChannelInteractive3d(_viewId);
-    Interactive3dPlatform.verify(_platform!);
-
-    // Listen for selection changes.
-    _selectionSubscription = _platform!.selectionStream.listen(_onSelectionChanged);
-
-    // Listen for cache selection changes
-    if (widget.onCacheSelectionChanged != null) {
-      _cacheSelectionSubscription =
-          (_platform as MethodChannelInteractive3d).cacheSelectionStream.listen(widget.onCacheSelectionChanged!);
-    }
-
-    // Create resources if needed (for .gltf only).
+    // Prepare resources for GLTF
     Map<String, ByteData> resources = {};
     if ((widget.modelPath ?? widget.modelUrl ?? '').endsWith('.gltf')) {
       resources = await _loadGltfResources();
     }
 
-    // Load the model.
+    // Load the model
     await _platform!.loadModel(
+      textureId: _textureId!,
       modelPath: widget.modelPath,
       modelUrl: widget.modelUrl,
       resources: resources,
       preselectedEntities: widget.preselectedEntities,
       selectionColor: widget.selectionColor,
-      patchColors: widget.patchColors, // Pass patchColors
+      patchColors: widget.patchColors,
       enableCache: widget.enableCache,
       cacheColor: widget.cacheColor,
       clearSelectionsOnHighlight: widget.clearSelectionOnHighlight,
       selectionSequence: widget.selectionSequence,
     );
 
-    // Load environment.
-    if(Platform.isAndroid) {
+    // Load environment (Android only uses IBL/skybox, iOS uses HDR)
+    if (Platform.isAndroid) {
       await _platform!.loadEnvironment(
+        textureId: _textureId!,
         iblPath: widget.iblPath,
         iblUrl: widget.iblUrl,
         skyboxPath: widget.skyboxPath,
@@ -271,45 +320,116 @@ class Interactive3dState extends State<Interactive3d> {
       );
     } else {
       await _platform!.loadHdrBackground(
+        textureId: _textureId!,
         backgroundPath: widget.iOSBackgroundEnvPath,
         backgroundUrl: widget.iOSBackgroundEnvUrl,
       );
     }
 
-    if(widget.defaultZoom != null) {
+    // Set default zoom if provided
+    if (widget.defaultZoom != null) {
       await setZoom(widget.defaultZoom);
     }
   }
 
-  // Set the default zoom level if provided.
+  /// Updates the texture size on the native side.
+  Future<void> _updateTextureSize(Size size) async {
+    // In a future enhancement, we could add a method to update texture size
+    // For now, the native side handles initial size and viewport updates
+  }
+
+  /// Handles tap up events.
+  void _handleTapUp(TapUpDetails details) {
+    if (_platform == null || _textureId == null) return;
+
+    _platform!.onTouchEvent(
+      textureId: _textureId!,
+      action: 'tap',
+      x: details.localPosition.dx,
+      y: details.localPosition.dy,
+    );
+  }
+
+  // Track the previous position for calculating delta during scale gestures
+  Offset? _lastFocalPoint;
+
+  /// Handles scale start events.
+  void _handleScaleStart(ScaleStartDetails details) {
+    _lastFocalPoint = details.localFocalPoint;
+  }
+
+  /// Handles scale update events (includes both pan and pinch-to-zoom).
+  void _handleScaleUpdate(ScaleUpdateDetails details) {
+    if (_platform == null || _textureId == null) return;
+
+    // Handle pinch-to-zoom
+    if (details.scale != 1.0) {
+      _platform!.onTouchEvent(
+        textureId: _textureId!,
+        action: 'scale',
+        scale: details.scale,
+      );
+    }
+
+    // Handle pan (single finger drag)
+    if (_lastFocalPoint != null) {
+      final delta = details.localFocalPoint - _lastFocalPoint!;
+      if (delta.distance > 0.5) {  // Threshold to avoid jitter
+        _platform!.onTouchEvent(
+          textureId: _textureId!,
+          action: 'pan',
+          deltaX: delta.dx,
+          deltaY: delta.dy,
+        );
+      }
+    }
+    _lastFocalPoint = details.localFocalPoint;
+  }
+
+  /// Sets the zoom level.
   Future<void> setZoom(double? level) async {
-    await _platform!.setCameraZoomLevel(level ?? widget.defaultZoom!);
+    if (_platform == null || _textureId == null || level == null) return;
+    await _platform!.setCameraZoomLevel(_textureId!, level);
   }
 
-  // Set the default zoom level if provided.
+  /// Clears the selection cache.
   Future<void> clearCache() async {
-    await _platform!.clearCache();
+    if (_platform == null || _textureId == null) return;
+    await _platform!.clearCache(_textureId!);
   }
 
+  /// Refreshes cache highlights.
   Future<void> refreshCacheHighlights() async {
-    await _platform!.refreshCacheHighlights();
+    if (_platform == null || _textureId == null) return;
+    await _platform!.refreshCacheHighlights(_textureId!);
   }
 
-  Future<void> removeFromCache(List<String> names) {
-    return _platform!.removeFromCache(names);
+  /// Removes entities from cache by name.
+  Future<void> removeFromCache(List<String> names) async {
+    if (_platform == null || _textureId == null) return;
+    await _platform!.removeFromCache(_textureId!, names);
   }
 
-  // Set the model part group if provided.
+  /// Updates visibility for a part group.
   Future<void> updatePartGroupConfig({required bool isVisible, required ModelPartGroup group}) async {
-    await _platform!.updatePartGroupConfig(isVisible: isVisible, group: group);
+    if (_platform == null || _textureId == null) return;
+    await _platform!.updatePartGroupConfig(
+      textureId: _textureId!,
+      isVisible: isVisible,
+      group: group,
+    );
   }
 
-  /// Loads additional resources required for `.gltf` models.
-  /// Returns a map of resource file names to their byte data.
+  /// Unselects entities by ID or all if null.
+  Future<void> unselectEntities({List<int>? entityIds}) async {
+    if (_platform == null || _textureId == null) return;
+    await _platform!.unselectEntities(textureId: _textureId!, entityIds: entityIds);
+  }
+
+  /// Loads GLTF resources.
   Future<Map<String, ByteData>> _loadGltfResources() async {
     Map<String, ByteData> resources = {};
 
-    // Identify the base directory for assets or assume same directory for URLs.
     String baseDir = '';
     if (widget.modelPath != null) {
       baseDir = widget.modelPath!.substring(0, widget.modelPath!.lastIndexOf('/') + 1);
@@ -317,16 +437,13 @@ class Interactive3dState extends State<Interactive3d> {
       baseDir = widget.modelUrl!.substring(0, widget.modelUrl!.lastIndexOf('/') + 1);
     }
 
-    List<String> candidates = widget.resources;
-
-    for (final file in candidates) {
+    for (final file in widget.resources) {
       try {
         if (widget.modelPath != null) {
           final path = '$baseDir$file';
           ByteData data = await rootBundle.load(path);
           resources[file] = data;
         } else if (widget.modelUrl != null) {
-          // For network resources, assume URLs are provided in resources list
           final uri = Uri.parse('$baseDir$file');
           ByteData data = await _loadNetworkResource(uri.toString());
           resources[file] = data;
@@ -339,7 +456,7 @@ class Interactive3dState extends State<Interactive3d> {
     return resources;
   }
 
-  /// Loads a resource from a network URL.
+  /// Loads a resource from network.
   Future<ByteData> _loadNetworkResource(String url) async {
     final response = await http.get(Uri.parse(url));
     if (response.statusCode == 200) {
@@ -349,14 +466,7 @@ class Interactive3dState extends State<Interactive3d> {
     }
   }
 
-  Future<void> unselectEntities({List<int>? entityIds}) async {
-    if (_platform == null) {
-      throw StateError('Platform view not initialized');
-    }
-    await _platform!.unselectEntities(entityIds: entityIds);
-  }
-
-  /// Handles selection changes and triggers the callback.
+  /// Handles selection changes.
   void _onSelectionChanged(List<EntityData> selectedEntities) {
     widget.onSelectionChanged?.call(selectedEntities);
   }
@@ -366,6 +476,12 @@ class Interactive3dState extends State<Interactive3d> {
     _selectionSubscription?.cancel();
     _cacheSelectionSubscription?.cancel();
     widget.controller?.detach();
+
+    // Dispose the texture
+    if (_platform != null && _textureId != null) {
+      _platform!.disposeTexture(_textureId!);
+    }
+
     super.dispose();
   }
 }

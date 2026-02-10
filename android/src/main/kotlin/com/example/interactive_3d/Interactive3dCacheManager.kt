@@ -2,53 +2,94 @@ package com.example.interactive_3d
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 
+/**
+ * Manages persistent caching of selected entities across sessions.
+ */
 class Interactive3dCacheManager(
-    context: Context,
-    modelKey: String,
-    val cacheColor: FloatArray // RGBA
+    private val context: Context,
+    private val modelKey: String,
+    val cacheColor: FloatArray
 ) {
-    private val prefs: SharedPreferences =
-        context.getSharedPreferences("interactive3d_cache", Context.MODE_PRIVATE)
-    private val cacheKey = "interactive3d.cache.$modelKey"
+    companion object {
+        private const val TAG = "Interactive3dCache"
+        private const val PREFS_NAME = "interactive_3d_cache"
+        private const val KEY_PREFIX = "cached_entities_"
+    }
 
-    // Keep cached entities in memory for quick access
-    var cachedEntities: MutableSet<String> = mutableSetOf()
-        private set
+    private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    // Callback for cache changes
-    var onCacheChanged: ((Set<String>) -> Unit)? = null
+    /**
+     * Set of currently cached entity names for this model.
+     */
+    val cachedEntities: MutableSet<String> = mutableSetOf()
 
     init {
-        loadCache()
+        loadFromPrefs()
     }
 
-    private fun loadCache() {
-        cachedEntities = prefs.getStringSet(cacheKey, emptySet())?.toMutableSet() ?: mutableSetOf()
+    /**
+     * Loads cached entities from SharedPreferences.
+     */
+    private fun loadFromPrefs() {
+        val key = KEY_PREFIX + modelKey
+        val stored = prefs.getStringSet(key, emptySet()) ?: emptySet()
+        cachedEntities.clear()
+        cachedEntities.addAll(stored)
+        Log.d(TAG, "Loaded ${cachedEntities.size} cached entities for model: $modelKey")
     }
 
-    private fun saveCache() {
-        prefs.edit().putStringSet(cacheKey, cachedEntities).apply()
-        onCacheChanged?.invoke(cachedEntities)
+    /**
+     * Saves cached entities to SharedPreferences.
+     */
+    private fun saveToPrefs() {
+        val key = KEY_PREFIX + modelKey
+        prefs.edit().putStringSet(key, cachedEntities.toSet()).apply()
     }
 
-    fun addToCache(entity: String) {
-        cachedEntities.add(entity)
-        saveCache()
+    /**
+     * Adds an entity to the cache.
+     */
+    fun addToCache(entityName: String) {
+        if (cachedEntities.add(entityName)) {
+            saveToPrefs()
+            Log.d(TAG, "Added to cache: $entityName")
+        }
     }
 
-    fun removeFromCache(entity: String) {
-        cachedEntities.remove(entity)
-        saveCache()
+    /**
+     * Removes an entity from the cache.
+     */
+    fun removeFromCache(entityName: String) {
+        if (cachedEntities.remove(entityName)) {
+            saveToPrefs()
+            Log.d(TAG, "Removed from cache: $entityName")
+        }
     }
 
+    /**
+     * Checks if an entity is cached.
+     */
+    fun isCached(entityName: String): Boolean {
+        return cachedEntities.contains(entityName)
+    }
+
+    /**
+     * Clears all cached entities for this model.
+     */
     fun clearCache() {
         cachedEntities.clear()
-        prefs.edit().remove(cacheKey).apply()
-        onCacheChanged?.invoke(cachedEntities)
+        saveToPrefs()
+        Log.d(TAG, "Cache cleared for model: $modelKey")
     }
 
-    fun isCached(entity: String): Boolean {
-        return cachedEntities.contains(entity)
+    /**
+     * Clears cache for all models.
+     */
+    fun clearAllCaches() {
+        prefs.edit().clear().apply()
+        cachedEntities.clear()
+        Log.d(TAG, "All caches cleared")
     }
 }

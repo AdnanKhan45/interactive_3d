@@ -279,10 +279,10 @@ class _MemoryTestViewerPageState extends State<MemoryTestViewerPage> {
               onCacheSelectionChanged: (cachedNames) {
                 debugPrint('Cached: $cachedNames');
               },
-              modelPath: 'assets/models/Tooth-3.glb',
+              modelPath: 'assets/models/FullJawV3.glb',
               iblPath: 'assets/models/giuseppe_bridge_4k_ibl.ktx',
               skyboxPath: 'assets/models/giuseppe_bridge_4k_skybox.ktx',
-              iOSBackgroundEnvPath: 'assets/models/san_giuseppe_bridge_4k.hdr',
+              iOSBackgroundEnvPath: 'assets/models/meadow_2_4k.hdr',
               selectionColor: const [0.32, 0.49, 0.55, 1.0],
               defaultZoom: 2,
               onSelectionChanged: (selectedEntities) {
