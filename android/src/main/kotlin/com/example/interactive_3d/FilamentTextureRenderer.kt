@@ -788,7 +788,7 @@ class FilamentTextureRenderer(
         }
 
         zoomLevel *= scaleFactor
-        zoomLevel = zoomLevel.coerceIn(0.1f, 10.0f)
+        zoomLevel = zoomLevel.coerceIn(0.3f, 3.0f)
         updateCameraPosition()
     }
 
