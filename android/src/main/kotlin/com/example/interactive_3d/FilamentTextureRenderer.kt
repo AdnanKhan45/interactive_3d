@@ -15,6 +15,9 @@ import java.nio.ByteBuffer
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
+import com.google.android.filament.SwapChainFlags
+import com.google.android.filament.ColorGrading
+import com.google.android.filament.ToneMapper
 
 /**
  * FilamentTextureRenderer - CRASH-FREE OPTIMIZED VERSION
@@ -221,8 +224,24 @@ class FilamentTextureRenderer(
             view?.camera = camera
 
             setupCamera()
+            camera?.setExposure(16.0f, 1.0f / 125.0f, 75.0f)
+
             setupEnhancedDefaultLighting()
             setupViewOptions()
+            view?.isPostProcessingEnabled = false
+
+            // MSAA still works at hardware level even with post-processing off
+            view?.multiSampleAntiAliasingOptions = view!!.multiSampleAntiAliasingOptions.apply {
+                enabled = true
+                sampleCount = 4
+            }
+            Log.d(TAG, "✓ MSAA 4x enabled (hardware-level, works without post-processing)")
+
+            // Adjust color grading for texture pipeline
+            val colorGrading = ColorGrading.Builder()
+                .toneMapper(ToneMapper.Linear())
+                .build(eng)
+            view?.colorGrading = colorGrading
 
             materialProvider = UbershaderProvider(eng)
             assetLoader = AssetLoader(eng, materialProvider!!, EntityManager.get())
@@ -242,7 +261,7 @@ class FilamentTextureRenderer(
         destroySwapChain()
 
         try {
-            swapChain = eng.createSwapChain(surface)
+            swapChain = eng.createSwapChain(surface, SwapChainFlags.CONFIG_TRANSPARENT)
             view?.viewport = Viewport(0, 0, width, height)
 
             camera?.setProjection(
@@ -397,7 +416,7 @@ class FilamentTextureRenderer(
     private fun setupViewOptions() {
         view?.apply {
             // Always use FXAA
-            antiAliasing = View.AntiAliasing.FXAA
+            antiAliasing = View.AntiAliasing.NONE
 
             // CRITICAL: Disable dynamic resolution - THIS FIXES INFINIX BLUR!
             dynamicResolutionOptions = dynamicResolutionOptions.apply {
@@ -442,6 +461,7 @@ class FilamentTextureRenderer(
             }
 
             dithering = View.Dithering.TEMPORAL
+            blendMode = View.BlendMode.TRANSLUCENT
 
             renderQuality = renderQuality.apply {
                 hdrColorBuffer = if (deviceTier == DeviceTier.HIGH_END) {
@@ -974,13 +994,16 @@ class FilamentTextureRenderer(
 
                 val selectionMat = material.createInstance()
 
+                selectionMat.setParameter("baseColorIndex", -1)
+                selectionMat.setParameter("metallicRoughnessIndex", -1)
+                selectionMat.setParameter("normalIndex", -1)
+                selectionMat.setParameter("emissiveIndex", -1)
+
                 selectionMat.setParameter("baseColorFactor", r, g, b, a)
-                selectionMat.setParameter("emissiveFactor", r * 0.8f, g * 0.8f, b * 0.8f)  // strong emit = solid flat color
-                selectionMat.setParameter("metallicFactor", 0.0f)   // no metallic
-                selectionMat.setParameter("roughnessFactor", 1.0f)  // fully rough = no reflections/shimmer
-
+                selectionMat.setParameter("emissiveFactor", 0.0f, 0.0f, 0.0f)
+                selectionMat.setParameter("metallicFactor", 0.0f)
+                selectionMat.setParameter("roughnessFactor", 1.0f)
                 rcm.setMaterialInstanceAt(ri, i, selectionMat)
-
                 createdMaterialInstances.add(selectionMat)
             } catch (e: Exception) {
                 Log.w(TAG, "Could not apply selection color: ${e.message}")
@@ -1002,7 +1025,7 @@ class FilamentTextureRenderer(
             try {
                 val materialInst = rcm.getMaterialInstanceAt(ri, i)
                 materialInst.setParameter("baseColorFactor", r, g, b, a)
-                materialInst.setParameter("emissiveFactor", r * 0.3f, g * 0.3f, b * 0.3f)
+                materialInst.setParameter("emissiveFactor", 0.0f, 0.0f, 0.0f)
                 materialInst.setParameter("metallicFactor", 0.1f)
                 materialInst.setParameter("roughnessFactor", 0.7f)
             } catch (e: Exception) {
