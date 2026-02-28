@@ -295,6 +295,10 @@ class Interactive3dTextureEntry(
         }
     }
 
+    fun setBackgroundColor(color: List<Double>) {
+        filamentRenderer?.setBackgroundColor(color)
+    }
+
     /**
      * Sends selection changed event to Flutter.
      */

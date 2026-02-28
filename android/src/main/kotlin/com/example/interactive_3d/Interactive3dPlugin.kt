@@ -143,6 +143,7 @@ class Interactive3dPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     val resources = call.argument<Map<String, ByteArray>>("resources") ?: emptyMap()
     val preselectedEntities = call.argument<List<String>?>("preselectedEntities")
     val selectionColor = call.argument<List<Double>?>("selectionColor")
+    val backgroundColor = call.argument<List<Double>>("backgroundColor")
     val patchColors = call.argument<List<Map<String, Any>>>("patchColors")
     val enableCache = call.argument<Boolean>("enableCache") ?: false
     val cacheColor = call.argument<List<Double>?>("cacheColor")
@@ -159,6 +160,13 @@ class Interactive3dPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     }
 
     try {
+
+      // Set background color before loading model (so clear color is ready)
+      if (backgroundColor != null && backgroundColor.size >= 3) {
+        entry.setBackgroundColor(backgroundColor)
+      }
+
+
       entry.loadModel(
         buffer = ByteBuffer.wrap(modelBytes),
         fileName = modelName,

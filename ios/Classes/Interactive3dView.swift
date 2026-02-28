@@ -3,6 +3,25 @@ import UIKit
 import SceneKit
 import GLTFSceneKit
 
+/// Weak wrapper to break retain cycle between FlutterEventChannel and Interactive3DPlatformView.
+/// FlutterEventChannel holds its stream handler STRONGLY — if the handler is self,
+/// self can never be deallocated. This wrapper holds a weak reference instead.
+private class WeakStreamHandler: NSObject, FlutterStreamHandler {
+    weak var delegate: (FlutterStreamHandler & AnyObject)?
+    
+    init(delegate: FlutterStreamHandler & AnyObject) {
+        self.delegate = delegate
+    }
+    
+    func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
+        return delegate?.onListen(withArguments: arguments, eventSink: events)
+    }
+    
+    func onCancel(withArguments arguments: Any?) -> FlutterError? {
+        return delegate?.onCancel(withArguments: arguments)
+    }
+}
+
 class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHandler {
     
     // 3D Model Core Related
@@ -65,8 +84,16 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
 
         super.init()
 
-        methodChannel.setMethodCallHandler(handleMethodCall)
-        eventChannel.setStreamHandler(self)
+        // FIX 1: Use [weak self] to break retain cycle
+         // Previously: methodChannel.setMethodCallHandler(handleMethodCall)
+         // That captures self STRONGLY → deinit never fires → all cleanup is dead code
+         methodChannel.setMethodCallHandler { [weak self] call, result in
+             self?.handleMethodCall(call, result: result)
+         }
+         
+         // FIX 2: Wrap in WeakStreamHandler to break retain cycle
+         // Previously: eventChannel.setStreamHandler(self) — holds self strongly
+         eventChannel.setStreamHandler(WeakStreamHandler(delegate: self))
 
         let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
         scnView.addGestureRecognizer(tapGesture)
@@ -78,71 +105,109 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
     }
 
     func view() -> UIView {
-        return scnView
-    }
-    
-    // MARK: - Cleanup and Memory Management
-    
-    deinit {
-        NSLog("Interactive3DPlatformView deinit called - cleaning up resources")
-        cleanup()
-    }
-    
-    /// Comprehensive cleanup of all resources to prevent memory leaks
-    private func cleanup() {
-        // 1. Remove gesture recognizers to break reference cycles
-        if let gestures = scnView.gestureRecognizers {
-            for gesture in gestures {
-                scnView.removeGestureRecognizer(gesture)
-            }
-        }
-        NSLog("Removed gesture recognizers")
-        
-        // 2. Clear event sink to stop event stream
-        eventSink = nil
-        
-        // 3. Remove method channel handler to break strong reference
-        methodChannel.setMethodCallHandler(nil)
-        
-        // 4. Remove stream handler
-        eventChannel.setStreamHandler(nil)
-        NSLog("Cleared channels")
-        
-        // 5. Clear all selection state
-        selectedNodes.removeAll()
-        
-        // 6. Clear all cached materials and opacities
-        originalMaterials.removeAll()
-        nodeOpacities.removeAll()
-        NSLog("Cleared selection and material dictionaries")
-        
-        // 7. Clear sequence configs
-        sequenceConfigs.removeAll()
-        allowedNext.removeAll()
-        startNodes.removeAll()
-        
-        // 8. Clear cache manager (releases UserDefaults references)
-        cacheManager = nil
-        
-        // 9. Remove all nodes from the scene to release resources
-        if let scene = scnView.scene {
-            scene.rootNode.enumerateChildNodes { (node, stop) in
-                node.removeFromParentNode()
-            }
-            scene.rootNode.geometry = nil
-            scene.background.contents = nil
-            scene.lightingEnvironment.contents = nil
-            NSLog("Cleared scene nodes and resources")
+            return scnView
         }
         
-        // 10. Clear the scene from the view
-        scnView.scene = nil
+        // MARK: - Cleanup and Memory Management
+    
+        // Background
+        private var useSolidBackground = false
         
-        // 11. Stop rendering to release GPU resources
-        scnView.stop(nil)
+        /// Track whether cleanup has already run (prevent double-cleanup)
+        private var isDisposed = false
         
-        NSLog("Interactive3DPlatformView cleanup completed")
-    }
+        deinit {
+            NSLog("Interactive3DPlatformView deinit called")
+            cleanup()
+        }
+        
+        /// Public dispose — called explicitly from the plugin when Flutter disposes the widget.
+        /// This is the PRIMARY cleanup path. deinit is backup only.
+        func dispose() {
+            NSLog("Interactive3DPlatformView dispose() called explicitly")
+            cleanup()
+        }
+        
+        /// Comprehensive cleanup of all resources to prevent memory leaks
+        private func cleanup() {
+            // Guard against double-cleanup
+            guard !isDisposed else {
+                NSLog("Already disposed, skipping cleanup")
+                return
+            }
+            isDisposed = true
+            
+            // 1. Break ALL retain cycles FIRST — this is what allows deallocation
+            methodChannel.setMethodCallHandler(nil)
+            eventChannel.setStreamHandler(nil)
+            eventSink = nil
+            NSLog("Broke retain cycles (channels cleared)")
+            
+            // 2. Remove gesture recognizers to break target-action retain cycle
+            if let gestures = scnView.gestureRecognizers {
+                for gesture in gestures {
+                    scnView.removeGestureRecognizer(gesture)
+                }
+            }
+            
+            // 3. Stop rendering BEFORE clearing scene (prevents render-during-teardown crashes)
+            scnView.isPlaying = false
+            scnView.stop(nil)
+            
+            // 4. Clear all selection state
+            selectedNodes.removeAll()
+            
+            // 5. Clear all cached materials — release strong SCNNode references
+            originalMaterials.removeAll()
+            nodeOpacities.removeAll()
+            
+            // 6. Clear sequence configs
+            sequenceConfigs.removeAll()
+            allowedNext.removeAll()
+            startNodes.removeAll()
+            
+            // 7. Clear cache manager
+            cacheManager = nil
+            
+            // 8. Deep-clean the scene — release geometry, materials, textures
+            if let scene = scnView.scene {
+                scene.rootNode.enumerateChildNodes { (node, _) in
+                    // Release geometry and all materials to free GPU memory
+                    if let geometry = node.geometry {
+                        for material in geometry.materials {
+                            material.diffuse.contents = nil
+                            material.normal.contents = nil
+                            material.emission.contents = nil
+                            material.multiply.contents = nil
+                            material.specular.contents = nil
+                            material.roughness.contents = nil
+                            material.metalness.contents = nil
+                            material.ambientOcclusion.contents = nil
+                        }
+                        geometry.materials = []
+                        node.geometry = nil
+                    }
+                    node.removeFromParentNode()
+                }
+                scene.rootNode.geometry = nil
+                scene.background.contents = nil
+                scene.lightingEnvironment.contents = nil
+            }
+            
+            // 9. Detach scene from view
+            scnView.scene = nil
+            
+            // 10. Force Metal/GPU resource release NOW instead of waiting for next GC
+            SCNTransaction.flush()
+            
+            // 11. Clear references
+            patchColors = nil
+            selectionColor = nil
+            pendingPreselectedEntities = nil
+            cameraNode = nil
+            
+            NSLog("Interactive3DPlatformView cleanup completed — all resources released")
+        }
 
     private func handleMethodCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
@@ -200,6 +265,21 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
                 }
             } else {
                 cacheManager = nil
+            }
+            
+            // Handle solid background color
+            if let bgColor = args["backgroundColor"] as? [Double], bgColor.count >= 3 {
+                let alpha = bgColor.count >= 4 ? CGFloat(bgColor[3]) : 1.0
+                useSolidBackground = true
+                scnView.backgroundColor = UIColor(
+                    red: CGFloat(bgColor[0]),
+                    green: CGFloat(bgColor[1]),
+                    blue: CGFloat(bgColor[2]),
+                    alpha: alpha
+                )
+                NSLog("Set solid background color: \(bgColor)")
+            } else {
+                useSolidBackground = false
             }
 
             DispatchQueue.main.async { [weak self] in
@@ -324,6 +404,11 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
                 self?.removeFromCache(names: names)
                 result(nil)
             }
+        case "dispose":
+                  DispatchQueue.main.async { [weak self] in
+                      self?.dispose()
+                      result(nil)
+                  }
 
 
         default:
@@ -402,35 +487,51 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
     /// Cleans up the previous model's resources before loading a new one
     /// This prevents memory accumulation across multiple model loads
     private func cleanupPreviousModel() {
-        // 1. Clear selections - this is important to release node references
-        selectedNodes.removeAll()
-        
-        // 2. Clear all material backups - THIS IS THE KEY FIX FOR MEMORY LEAK
-        // The originalMaterials dictionary was accumulating materials indefinitely
-        originalMaterials.removeAll()
-        NSLog("Cleared \(originalMaterials.count) original materials")
-        
-        // 3. Clear node opacities tracking
-        nodeOpacities.removeAll()
-        
-        // 4. Remove all nodes from current scene before replacing it
-        if let currentScene = scnView.scene {
-            currentScene.rootNode.enumerateChildNodes { (node, _) in
-                // Release geometry and materials
-                node.geometry = nil
-                node.removeFromParentNode()
+            // 1. Clear selections — release strong node references
+            selectedNodes.removeAll()
+            
+            // 2. Clear all material backups
+            let materialCount = originalMaterials.count
+            originalMaterials.removeAll()
+            NSLog("Cleared \(materialCount) original materials")
+            
+            // 3. Clear node opacities tracking
+            nodeOpacities.removeAll()
+            
+            // 4. Deep-clean: release geometry, materials, textures from all nodes
+            if let currentScene = scnView.scene {
+                currentScene.rootNode.enumerateChildNodes { (node, _) in
+                    if let geometry = node.geometry {
+                        // Release all material texture contents to free GPU memory
+                        for material in geometry.materials {
+                            material.diffuse.contents = nil
+                            material.normal.contents = nil
+                            material.emission.contents = nil
+                            material.multiply.contents = nil
+                            material.specular.contents = nil
+                            material.roughness.contents = nil
+                            material.metalness.contents = nil
+                            material.ambientOcclusion.contents = nil
+                        }
+                        geometry.materials = []
+                        node.geometry = nil
+                    }
+                    node.removeFromParentNode()
+                }
+                currentScene.background.contents = nil
+                currentScene.lightingEnvironment.contents = nil
+                NSLog("Deep-cleaned all nodes from previous scene")
             }
-            // Clear scene properties
-            currentScene.background.contents = nil
-            currentScene.lightingEnvironment.contents = nil
-            NSLog("Removed all nodes from previous scene")
+            
+            // 5. Force Metal/GPU resource flush NOW
+            SCNTransaction.flush()
+            
+            // 6. Clear pending state
+            pendingPreselectedEntities = nil
+            cameraNode = nil
+            
+            NSLog("Previous model cleanup completed")
         }
-        
-        // 5. Clear pending preselected entities
-        pendingPreselectedEntities = nil
-        
-        NSLog("Previous model cleanup completed")
-    }
     
     private func loadModel(modelBytes: Data) throws {
         NSLog("Received modelBytes with size: \(modelBytes.count) bytes")
@@ -732,18 +833,16 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
     }
 
     private func findGeometryNode(in node: SCNNode) -> SCNNode? {
-        NSLog("Checking node for geometry: \(node.name ?? "Unnamed") | Has geometry: \(node.geometry != nil)")
-        if node.geometry != nil {
-            NSLog("Found geometry in: \(node.name ?? "Unnamed")")
-            return node
-        }
-        for child in node.childNodes {
-            if let found = findGeometryNode(in: child) {
-                return found
+            if node.geometry != nil {
+                return node
             }
+            for child in node.childNodes {
+                if let found = findGeometryNode(in: child) {
+                    return found
+                }
+            }
+            return nil
         }
-        return nil
-    }
 
     private func getEntityColor(nodeName: String?) -> UIColor {
         // Check for patchColors first
@@ -881,6 +980,12 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
                 code: -5,
                 userInfo: [NSLocalizedDescriptionKey: "Scene not initialized"]
             )
+        }
+
+        // Skip background image if using solid color
+        if useSolidBackground {
+            NSLog("Skipping HDR background — using solid background color")
+            return
         }
 
         // Apply the resized image as the scene's background (visible only)

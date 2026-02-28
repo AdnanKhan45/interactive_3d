@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -61,8 +62,9 @@ class ModelPartGroup {
 
 /// A widget for rendering and interacting with 3D models.
 ///
-/// This implementation uses Flutter's Texture widget with SurfaceProducer API
-/// for high-performance rendering instead of PlatformView/AndroidView.
+/// On Android: Uses Flutter's Texture widget with SurfaceProducer API
+/// for high-performance rendering.
+/// On iOS: Uses UiKitView PlatformView with SCNView for native rendering.
 class Interactive3d extends StatefulWidget {
   /// Path to the 3D model file (e.g., `.glb` or `.gltf`) to be loaded from assets.
   final String? modelPath;
@@ -104,6 +106,11 @@ class Interactive3d extends StatefulWidget {
 
   /// The initial zoom level of the camera when the 3D model is loaded.
   final double? defaultZoom;
+
+  /// If non-null, uses a solid color background instead of the IBL skybox.
+  /// Format: [r, g, b, a] with values 0.0–1.0.
+  /// Default when enabled without a color: dim white [0.92, 0.92, 0.92, 1.0]
+  final List<double>? solidBackgroundColor;
 
   /// A list of PatchColor objects specifying entity-specific selection and preselection colors.
   final List<PatchColor>? patchColors;
@@ -148,6 +155,7 @@ class Interactive3d extends StatefulWidget {
     this.preselectedEntities,
     this.selectionColor,
     this.defaultZoom,
+    this.solidBackgroundColor,
     this.patchColors,
     this.controller,
     this.enableCache = false,
@@ -165,25 +173,20 @@ class Interactive3d extends StatefulWidget {
 
 /// State class for the `Interactive3d` widget.
 class Interactive3dState extends State<Interactive3d> {
-  /// Platform-specific implementation for interacting with the 3D viewer.
+  // ── Android (Texture API) ──
   Interactive3dPlatform? _platform;
-
-  /// The texture ID returned by the native side.
   int? _textureId;
-
-  /// Whether the texture is being initialized.
   bool _isInitializing = false;
 
-  /// Whether the model is loaded.
+  // ── iOS (PlatformView) ──
+  int? _iosViewId;
+  MethodChannel? _iosMethodChannel;
+  StreamSubscription? _iosEventSubscription;
+
+  // ── Shared ──
   bool _isLoaded = false;
-
-  /// Subscription to the selection stream for listening to selection changes.
   StreamSubscription<List<EntityData>>? _selectionSubscription;
-
-  /// Subscription to the selection stream for listening to cached selection changes.
   StreamSubscription<List<String>>? _cacheSelectionSubscription;
-
-  /// The current size of the widget.
   Size? _currentSize;
 
   @override
@@ -201,18 +204,26 @@ class Interactive3dState extends State<Interactive3d> {
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // BUILD
+  // ═══════════════════════════════════════════════════════════════════════════
+
   @override
   Widget build(BuildContext context) {
+    // iOS: PlatformView (SCNView via UiKitView)
+    if (Platform.isIOS) {
+      return _buildIOSPlatformView();
+    }
+
+    // Android: Texture API (SurfaceProducer + Filament)
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
 
-        // Initialize texture when we have a valid size
         if (_textureId == null && !_isInitializing && size.width > 0 && size.height > 0) {
           _initializeTexture(size);
         }
 
-        // Update size if changed
         if (_currentSize != size && _textureId != null) {
           _currentSize = size;
           _updateTextureSize(size);
@@ -228,7 +239,126 @@ class Interactive3dState extends State<Interactive3d> {
     );
   }
 
-  /// Builds the texture widget with gesture handling.
+  // ═══════════════════════════════════════════════════════════════════════════
+  // iOS — PlatformView
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildIOSPlatformView() {
+    return UiKitView(
+      viewType: 'interactive_3d',
+      creationParams: {
+        'modelPath': widget.modelPath,
+        'modelUrl': widget.modelUrl,
+        'solidBackgroundColor': widget.solidBackgroundColor,
+      },
+      creationParamsCodec: const StandardMessageCodec(),
+      onPlatformViewCreated: _onIOSPlatformViewCreated,
+    );
+  }
+
+  void _onIOSPlatformViewCreated(int viewId) {
+    _iosViewId = viewId;
+    _iosMethodChannel = MethodChannel('interactive_3d_$viewId');
+    final eventChannel = EventChannel('interactive_3d_events_$viewId');
+
+    // Listen for native events
+    _iosEventSubscription = eventChannel.receiveBroadcastStream().listen((event) {
+      final map = event as Map<dynamic, dynamic>;
+      final String eventType = map['event'];
+
+      if (eventType == 'selectionChanged') {
+        final List<dynamic> selectedEntities = map['selectedEntities'];
+        final entities = selectedEntities.map((e) {
+          return EntityData(id: e['id'] as int, name: e['name'] as String);
+        }).toList();
+        widget.onSelectionChanged?.call(entities);
+      } else if (eventType == 'cacheSelectionChanged') {
+        final List<dynamic> cachedEntities = map['cachedEntities'];
+        final entityNames = cachedEntities.map<String>((e) => e['name'] as String).toList();
+        widget.onCacheSelectionChanged?.call(entityNames);
+      }
+    });
+
+    // Load model and environment via the view's method channel
+    _loadIOSModelAndEnvironment();
+  }
+
+  Future<void> _loadIOSModelAndEnvironment() async {
+    final channel = _iosMethodChannel;
+    if (channel == null) return;
+
+    try {
+      // Load model bytes
+      Uint8List modelBytes;
+      String modelName;
+
+      if (widget.modelPath != null) {
+        final data = await rootBundle.load(widget.modelPath!);
+        modelBytes = data.buffer.asUint8List();
+        modelName = widget.modelPath!.split('/').last;
+      } else if (widget.modelUrl != null) {
+        final response = await http.get(Uri.parse(widget.modelUrl!));
+        if (response.statusCode != 200) {
+          throw Exception('Failed to load model: ${widget.modelUrl}');
+        }
+        modelBytes = response.bodyBytes;
+        modelName = widget.modelUrl!.split('/').last;
+      } else {
+        return;
+      }
+
+      await channel.invokeMethod('loadModel', {
+        'modelBytes': modelBytes,
+        'name': modelName,
+        'preselectedEntities': widget.preselectedEntities,
+        'selectionColor': widget.selectionColor,
+        'patchColors': widget.patchColors?.map((p) => {
+          'name': p.name,
+          'color': p.color,
+        }).toList(),
+        'enableCache': widget.enableCache,
+        'cacheColor': widget.cacheColor,
+        'clearSelectionsOnHighlight': widget.clearSelectionOnHighlight,
+        'selectionSequence': widget.selectionSequence?.map((c) => c.toJson()).toList(),
+        'backgroundColor': widget.solidBackgroundColor,
+      });
+
+      // Load HDR background for iOS
+      if (widget.iOSBackgroundEnvPath != null || widget.iOSBackgroundEnvUrl != null) {
+        Uint8List? bgBytes;
+        if (widget.iOSBackgroundEnvPath != null) {
+          final data = await rootBundle.load(widget.iOSBackgroundEnvPath!);
+          bgBytes = data.buffer.asUint8List();
+        } else if (widget.iOSBackgroundEnvUrl != null) {
+          final response = await http.get(Uri.parse(widget.iOSBackgroundEnvUrl!));
+          if (response.statusCode == 200) {
+            bgBytes = response.bodyBytes;
+          }
+        }
+        if (bgBytes != null) {
+          await channel.invokeMethod('loadHdrBackground', {
+            'backgroundBytes': bgBytes,
+          });
+        }
+      }
+
+      // Set default zoom
+      if (widget.defaultZoom != null) {
+        await channel.invokeMethod('setZoomLevel', {
+          'zoom': widget.defaultZoom,
+        });
+      }
+
+      _isLoaded = true;
+    } catch (e) {
+      debugPrint('Error loading iOS model: $e');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Android — Texture API
+  // ═══════════════════════════════════════════════════════════════════════════
+
   Widget _buildTextureWidget() {
     return GestureDetector(
       onTapUp: _handleTapUp,
@@ -238,7 +368,6 @@ class Interactive3dState extends State<Interactive3d> {
     );
   }
 
-  /// Initializes the texture on the native side.
   Future<void> _initializeTexture(Size size) async {
     if (_isInitializing) return;
     _isInitializing = true;
@@ -246,7 +375,6 @@ class Interactive3dState extends State<Interactive3d> {
     try {
       _platform = MethodChannelInteractive3d();
 
-      // Create texture with initial size
       final result = await _platform!.createTexture(
         width: size.width.toInt(),
         height: size.height.toInt(),
@@ -260,23 +388,17 @@ class Interactive3dState extends State<Interactive3d> {
       _textureId = textureId;
       _currentSize = size;
 
-      if (mounted) {
-        setState(() {});
-      }
+      if (mounted) setState(() {});
 
-      // Listen for selection changes
       _selectionSubscription = _platform!.selectionStream(_textureId!).listen(_onSelectionChanged);
 
-      // Listen for cache selection changes
       if (widget.onCacheSelectionChanged != null) {
         _cacheSelectionSubscription = _platform!.cacheSelectionStream(_textureId!).listen(widget.onCacheSelectionChanged!);
       }
 
-      // Load model and environment
-      await _loadModelAndEnvironment();
+      await _loadAndroidModelAndEnvironment();
 
       _isLoaded = true;
-
     } catch (e) {
       debugPrint('Error initializing texture: $e');
     } finally {
@@ -284,17 +406,14 @@ class Interactive3dState extends State<Interactive3d> {
     }
   }
 
-  /// Loads the model and environment.
-  Future<void> _loadModelAndEnvironment() async {
+  Future<void> _loadAndroidModelAndEnvironment() async {
     if (_platform == null || _textureId == null) return;
 
-    // Prepare resources for GLTF
     Map<String, ByteData> resources = {};
     if ((widget.modelPath ?? widget.modelUrl ?? '').endsWith('.gltf')) {
       resources = await _loadGltfResources();
     }
 
-    // Load the model
     await _platform!.loadModel(
       textureId: _textureId!,
       modelPath: widget.modelPath,
@@ -307,41 +426,32 @@ class Interactive3dState extends State<Interactive3d> {
       cacheColor: widget.cacheColor,
       clearSelectionsOnHighlight: widget.clearSelectionOnHighlight,
       selectionSequence: widget.selectionSequence,
+      backgroundColor: widget.solidBackgroundColor,
     );
 
-    // Load environment (Android only uses IBL/skybox, iOS uses HDR)
-    if (Platform.isAndroid) {
-      await _platform!.loadEnvironment(
-        textureId: _textureId!,
-        iblPath: widget.iblPath,
-        iblUrl: widget.iblUrl,
-        skyboxPath: widget.skyboxPath,
-        skyboxUrl: widget.skyboxUrl,
-      );
-    } else {
-      await _platform!.loadHdrBackground(
-        textureId: _textureId!,
-        backgroundPath: widget.iOSBackgroundEnvPath,
-        backgroundUrl: widget.iOSBackgroundEnvUrl,
-      );
-    }
+    await _platform!.loadEnvironment(
+      textureId: _textureId!,
+      iblPath: widget.iblPath,
+      iblUrl: widget.iblUrl,
+      skyboxPath: widget.skyboxPath,
+      skyboxUrl: widget.skyboxUrl,
+    );
 
-    // Set default zoom if provided
     if (widget.defaultZoom != null) {
       await setZoom(widget.defaultZoom);
     }
   }
 
-  /// Updates the texture size on the native side.
   Future<void> _updateTextureSize(Size size) async {
-    // In a future enhancement, we could add a method to update texture size
-    // For now, the native side handles initial size and viewport updates
+    // Future enhancement: update texture size on native side
   }
 
-  /// Handles tap up events.
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Gesture Handling (Android Texture only — iOS handles natively via SCNView)
+  // ═══════════════════════════════════════════════════════════════════════════
+
   void _handleTapUp(TapUpDetails details) {
     if (_platform == null || _textureId == null) return;
-
     _platform!.onTouchEvent(
       textureId: _textureId!,
       action: 'tap',
@@ -350,19 +460,15 @@ class Interactive3dState extends State<Interactive3d> {
     );
   }
 
-  // Track the previous position for calculating delta during scale gestures
   Offset? _lastFocalPoint;
 
-  /// Handles scale start events.
   void _handleScaleStart(ScaleStartDetails details) {
     _lastFocalPoint = details.localFocalPoint;
   }
 
-  /// Handles scale update events (includes both pan and pinch-to-zoom).
   void _handleScaleUpdate(ScaleUpdateDetails details) {
     if (_platform == null || _textureId == null) return;
 
-    // Handle pinch-to-zoom
     if (details.scale != 1.0) {
       _platform!.onTouchEvent(
         textureId: _textureId!,
@@ -371,10 +477,9 @@ class Interactive3dState extends State<Interactive3d> {
       );
     }
 
-    // Handle pan (single finger drag)
     if (_lastFocalPoint != null) {
       final delta = details.localFocalPoint - _lastFocalPoint!;
-      if (delta.distance > 0.5) {  // Threshold to avoid jitter
+      if (delta.distance > 0.5) {
         _platform!.onTouchEvent(
           textureId: _textureId!,
           action: 'pan',
@@ -386,47 +491,76 @@ class Interactive3dState extends State<Interactive3d> {
     _lastFocalPoint = details.localFocalPoint;
   }
 
-  /// Sets the zoom level.
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Public API — routes to correct platform
+  // ═══════════════════════════════════════════════════════════════════════════
+
   Future<void> setZoom(double? level) async {
-    if (_platform == null || _textureId == null || level == null) return;
-    await _platform!.setCameraZoomLevel(_textureId!, level);
+    if (level == null) return;
+    if (Platform.isIOS) {
+      await _iosMethodChannel?.invokeMethod('setZoomLevel', {'zoom': level});
+    } else {
+      if (_platform == null || _textureId == null) return;
+      await _platform!.setCameraZoomLevel(_textureId!, level);
+    }
   }
 
-  /// Clears the selection cache.
   Future<void> clearCache() async {
-    if (_platform == null || _textureId == null) return;
-    await _platform!.clearCache(_textureId!);
+    if (Platform.isIOS) {
+      await _iosMethodChannel?.invokeMethod('clearCache');
+    } else {
+      if (_platform == null || _textureId == null) return;
+      await _platform!.clearCache(_textureId!);
+    }
   }
 
-  /// Refreshes cache highlights.
   Future<void> refreshCacheHighlights() async {
-    if (_platform == null || _textureId == null) return;
-    await _platform!.refreshCacheHighlights(_textureId!);
+    if (Platform.isIOS) {
+      await _iosMethodChannel?.invokeMethod('refreshCacheHighlights');
+    } else {
+      if (_platform == null || _textureId == null) return;
+      await _platform!.refreshCacheHighlights(_textureId!);
+    }
   }
 
-  /// Removes entities from cache by name.
   Future<void> removeFromCache(List<String> names) async {
-    if (_platform == null || _textureId == null) return;
-    await _platform!.removeFromCache(_textureId!, names);
+    if (Platform.isIOS) {
+      await _iosMethodChannel?.invokeMethod('removeFromCache', names);
+    } else {
+      if (_platform == null || _textureId == null) return;
+      await _platform!.removeFromCache(_textureId!, names);
+    }
   }
 
-  /// Updates visibility for a part group.
   Future<void> updatePartGroupConfig({required bool isVisible, required ModelPartGroup group}) async {
-    if (_platform == null || _textureId == null) return;
-    await _platform!.updatePartGroupConfig(
-      textureId: _textureId!,
-      isVisible: isVisible,
-      group: group,
-    );
+    if (Platform.isIOS) {
+      await _iosMethodChannel?.invokeMethod('setPartGroupVisibility', {
+        'group': group.toMap(),
+        'visibility': {group.title: isVisible},
+      });
+    } else {
+      if (_platform == null || _textureId == null) return;
+      await _platform!.updatePartGroupConfig(
+        textureId: _textureId!,
+        isVisible: isVisible,
+        group: group,
+      );
+    }
   }
 
-  /// Unselects entities by ID or all if null.
   Future<void> unselectEntities({List<int>? entityIds}) async {
-    if (_platform == null || _textureId == null) return;
-    await _platform!.unselectEntities(textureId: _textureId!, entityIds: entityIds);
+    if (Platform.isIOS) {
+      await _iosMethodChannel?.invokeMethod('unselectEntities', entityIds);
+    } else {
+      if (_platform == null || _textureId == null) return;
+      await _platform!.unselectEntities(textureId: _textureId!, entityIds: entityIds);
+    }
   }
 
-  /// Loads GLTF resources.
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Helpers
+  // ═══════════════════════════════════════════════════════════════════════════
+
   Future<Map<String, ByteData>> _loadGltfResources() async {
     Map<String, ByteData> resources = {};
 
@@ -456,7 +590,6 @@ class Interactive3dState extends State<Interactive3d> {
     return resources;
   }
 
-  /// Loads a resource from network.
   Future<ByteData> _loadNetworkResource(String url) async {
     final response = await http.get(Uri.parse(url));
     if (response.statusCode == 200) {
@@ -466,20 +599,30 @@ class Interactive3dState extends State<Interactive3d> {
     }
   }
 
-  /// Handles selection changes.
   void _onSelectionChanged(List<EntityData> selectedEntities) {
     widget.onSelectionChanged?.call(selectedEntities);
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Dispose
+  // ═══════════════════════════════════════════════════════════════════════════
 
   @override
   void dispose() {
     _selectionSubscription?.cancel();
     _cacheSelectionSubscription?.cancel();
+    _iosEventSubscription?.cancel();
     widget.controller?.detach();
 
-    // Dispose the texture
-    if (_platform != null && _textureId != null) {
-      _platform!.disposeTexture(_textureId!);
+    if (Platform.isIOS) {
+      // Explicitly trigger native cleanup (breaks retain cycles)
+      _iosMethodChannel?.invokeMethod('dispose');
+      _iosMethodChannel = null;
+    } else {
+      // Dispose the Android texture
+      if (_platform != null && _textureId != null) {
+        _platform!.disposeTexture(_textureId!);
+      }
     }
 
     super.dispose();

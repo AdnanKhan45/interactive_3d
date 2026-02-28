@@ -92,6 +92,15 @@ class FilamentTextureRenderer(
     private var zoomLevel = 1.0f
     private var lastCameraUpdate = 0L
 
+    // Phase 4: Adaptive frame pacing — reduce GPU usage when idle
+    private var isInteracting = false
+    private var idleFrameCount = 0
+    private val idleResumeHandler = Handler(Looper.getMainLooper())
+    private val markIdleRunnable = Runnable {
+        isInteracting = false
+        idleFrameCount = 0
+    }
+
     // Selection
     private val selectedEntities = mutableSetOf<Int>()
     private var selectionColor = floatArrayOf(0f, 1f, 0f, 1f)
@@ -102,6 +111,10 @@ class FilamentTextureRenderer(
     private var enableCache = false
     private var cacheManager: Interactive3dCacheManager? = null
     private var cacheColor = floatArrayOf(0.8f, 0.8f, 0.2f, 0.6f)
+
+    // Background
+    private var useSolidBackground = false
+    private var solidBackgroundColor = floatArrayOf(0.92f, 0.92f, 0.92f, 1.0f)
 
     // Pending operations
     private var pendingPreselectedEntities: List<String>? = null
@@ -126,6 +139,15 @@ class FilamentTextureRenderer(
     // Device-specific settings
     private val deviceTier: DeviceTier
     private val qualitySettings: QualitySettings
+
+
+    // Phase 1: Supersampling — render at higher resolution than widget for sharper output
+    private val renderScale: Float
+        get() = when (deviceTier) {
+            DeviceTier.HIGH_END -> 1.5f     // 1.5x supersampling
+            DeviceTier.MID_RANGE -> 1.25f   // 1.25x boost
+            DeviceTier.LOW_END -> 1.1f      // 1.1x — minimal cost, noticeable improvement
+        }
 
     init {
         deviceTier = detectDeviceTier()
@@ -200,7 +222,7 @@ class FilamentTextureRenderer(
                 enableAO = false
             )
             DeviceTier.LOW_END -> QualitySettings(
-                msaaSamples = 0,  // NO MSAA for Mali (fixes blur!)
+                msaaSamples = 2,  // NO MSAA for Mali (fixes blur!)
                 enableBloom = false,
                 enableAO = false
             )
@@ -228,6 +250,9 @@ class FilamentTextureRenderer(
 
             setupEnhancedDefaultLighting()
             setupViewOptions()
+
+            scene?.skybox = null
+
             view?.isPostProcessingEnabled = false
 
             // MSAA still works at hardware level even with post-processing off
@@ -262,18 +287,21 @@ class FilamentTextureRenderer(
 
         try {
             swapChain = eng.createSwapChain(surface, SwapChainFlags.CONFIG_TRANSPARENT)
+
+            val renderWidth = (width * renderScale).toInt()
+            val renderHeight = (height * renderScale).toInt()
             view?.viewport = Viewport(0, 0, width, height)
 
             camera?.setProjection(
                 DEFAULT_FOV / zoomLevel,
-                if (height > 0) width.toDouble() / height.toDouble() else 1.0,
+                if (renderHeight > 0) renderWidth.toDouble() / renderHeight.toDouble() else 1.0,
                 NEAR_PLANE,
                 FAR_PLANE,
                 Camera.Fov.VERTICAL
             )
 
             updateCameraPosition()
-            Log.d(TAG, "SwapChain created successfully")
+            Log.d(TAG, "SwapChain created successfully (render: ${renderWidth}x${renderHeight}, widget: ${width}x${height})")
         } catch (e: Exception) {
             Log.e(TAG, "Error creating SwapChain: ${e.message}", e)
         }
@@ -293,7 +321,10 @@ class FilamentTextureRenderer(
 
         this.width = width
         this.height = height
-        view?.viewport = Viewport(0, 0, width, height)
+        // Phase 1: Supersampled viewport
+        val renderWidth = (width * renderScale).toInt()
+        val renderHeight = (height * renderScale).toInt()
+        view?.viewport = Viewport(0, 0, renderWidth, renderHeight)
 
         camera?.setProjection(
             DEFAULT_FOV / zoomLevel,
@@ -474,7 +505,8 @@ class FilamentTextureRenderer(
 
         renderer?.setClearOptions(
             Renderer.ClearOptions().apply {
-                clearColor = floatArrayOf(0.2f, 0.2f, 0.2f, 1.0f)
+                clearColor = if (useSolidBackground) solidBackgroundColor
+                else floatArrayOf(0.2f, 0.2f, 0.2f, 1.0f)
                 clear = true
             }
         )
@@ -668,6 +700,7 @@ class FilamentTextureRenderer(
         val scn = scene ?: return
 
         try {
+            // Always load IBL for lighting quality
             iblBuffer.rewind()
             val iblBundle = KTX1Loader.createIndirectLight(eng, iblBuffer)
             indirectLight?.let { eng.destroyIndirectLight(it) }
@@ -675,10 +708,15 @@ class FilamentTextureRenderer(
             indirectLight?.intensity = 50000.0f
             scn.indirectLight = indirectLight
 
-            skyboxBuffer.rewind()
-            val skyboxBundle = KTX1Loader.createSkybox(eng, skyboxBuffer)
-            skybox = skyboxBundle.skybox
-            scn.skybox = skybox
+            // Only load skybox if NOT using solid background
+            if (!useSolidBackground) {
+                skyboxBuffer.rewind()
+                val skyboxBundle = KTX1Loader.createSkybox(eng, skyboxBuffer)
+                skybox = skyboxBundle.skybox
+                scn.skybox = skybox
+            } else {
+                Log.d(TAG, "Skybox skipped — using solid background")
+            }
 
             view?.apply {
                 ambientOcclusionOptions = ambientOcclusionOptions.apply {
@@ -731,7 +769,33 @@ class FilamentTextureRenderer(
         updateCameraPosition()
     }
 
+    fun setBackgroundColor(color: List<Double>) {
+        if (color.size >= 3) {
+            useSolidBackground = true
+            solidBackgroundColor = floatArrayOf(
+                color[0].toFloat(),
+                color[1].toFloat(),
+                color[2].toFloat(),
+                if (color.size >= 4) color[3].toFloat() else 1.0f
+            )
+            renderer?.setClearOptions(
+                Renderer.ClearOptions().apply {
+                    clearColor = solidBackgroundColor
+                    clear = true
+                }
+            )
+            scene?.skybox = null
+            Log.d(TAG, "✓ Solid background: [${solidBackgroundColor.joinToString()}]")
+        }
+    }
+
     fun onTap(x: Int, y: Int) {
+        // Phase 4: Tap also counts as interaction
+        isInteracting = true
+        idleFrameCount = 0
+        idleResumeHandler.removeCallbacks(markIdleRunnable)
+        idleResumeHandler.postDelayed(markIdleRunnable, 500)
+
         val v = view ?: return
         val flippedY = height - y
 
@@ -788,8 +852,14 @@ class FilamentTextureRenderer(
         }
         lastCameraUpdate = now
 
-        orbitAngleY -= deltaX * 0.009375f
-        orbitAngleX += deltaY * 0.009375f
+        // Phase 4: Mark as interacting, schedule idle after 500ms of no input
+        isInteracting = true
+        idleFrameCount = 0
+        idleResumeHandler.removeCallbacks(markIdleRunnable)
+        idleResumeHandler.postDelayed(markIdleRunnable, 500)
+
+        orbitAngleY -= deltaX * 0.02f
+        orbitAngleX += deltaY * 0.02f
         orbitAngleX = orbitAngleX.coerceIn(-1.4f, 1.4f)
         updateCameraPosition()
     }
@@ -800,6 +870,12 @@ class FilamentTextureRenderer(
             return
         }
         lastCameraUpdate = now
+
+        // Phase 4: Mark as interacting
+        isInteracting = true
+        idleFrameCount = 0
+        idleResumeHandler.removeCallbacks(markIdleRunnable)
+        idleResumeHandler.postDelayed(markIdleRunnable, 500)
 
         val scaleFactor = if (scale > 1.0f) {
             1.0f + (scale - 1.0f) * 0.15f
@@ -1164,6 +1240,7 @@ class FilamentTextureRenderer(
         // STEP 3: Cancel pending
         pendingMaterialUpdates.values.forEach { materialUpdateHandler.removeCallbacks(it) }
         pendingMaterialUpdates.clear()
+        idleResumeHandler.removeCallbacks(markIdleRunnable)
 
         // STEP 4: Cancel IO
         ioScope.cancel()
@@ -1253,6 +1330,20 @@ class FilamentTextureRenderer(
 
             choreographer.postFrameCallback(this)
 
+            // Phase 4: Adaptive frame pacing
+            // - Interacting: 60fps (every frame)
+            // - Brief idle (< 30 frames): 30fps (every other frame)
+            // - Long idle (> 90 frames / ~1.5s): pause rendering entirely
+            if (!isInteracting) {
+                idleFrameCount++
+                if (idleFrameCount > 90) {
+                    return  // fully idle — stop rendering to save battery
+                }
+                if (idleFrameCount > 30 && frameCount % 2 != 0) {
+                    return  // 30fps during brief idle
+                }
+            }
+
             val rend = renderer ?: return
             val sc = swapChain ?: return
             val v = view ?: return
@@ -1274,7 +1365,7 @@ class FilamentTextureRenderer(
                     if (frameCount % 120 == 0) {
                         val scn = scene
                         val entityCount = scn?.entityCount ?: 0
-                        Log.d(TAG, "Rendered $frameCount frames ($entityCount entities)")
+                        Log.d(TAG, "Rendered $frameCount frames ($entityCount entities, idle: $idleFrameCount)")
                     }
                 }
             } catch (e: Exception) {

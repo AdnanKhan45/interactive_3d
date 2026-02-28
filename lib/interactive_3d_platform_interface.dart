@@ -39,6 +39,7 @@ abstract class Interactive3dPlatform extends PlatformInterface {
     List<double>? cacheColor,
     bool clearSelectionsOnHighlight = false,
     List<SequenceConfig>? selectionSequence,
+    final List<double>? backgroundColor
   });
 
   /// Loads environment lighting into the specified texture.

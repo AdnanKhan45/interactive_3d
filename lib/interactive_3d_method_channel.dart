@@ -112,6 +112,7 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
     List<double>? cacheColor,
     bool clearSelectionsOnHighlight = false,
     List<SequenceConfig>? selectionSequence,
+    final List<double>? backgroundColor
   }) async {
     Uint8List modelBytes;
     String modelName;
@@ -152,6 +153,7 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
       'cacheColor': cacheColor,
       'clearSelectionsOnHighlight': clearSelectionsOnHighlight,
       'selectionSequence': selectionSequence?.map((c) => c.toJson()).toList(),
+      'backgroundColor': backgroundColor,
     });
   }
 
