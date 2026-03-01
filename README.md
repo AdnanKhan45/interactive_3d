@@ -8,7 +8,7 @@
 
 ## Features
 
-✅ Render 3D models of type `.glb` and `.gltf` from both (assets & network).
+✅ Render 3D models of type `.glb` and `.gltf` from both assets & network.
 
 ✅ Load models background environments ibl and skybox `.ktx` files.
 
@@ -18,9 +18,19 @@
 
 ✅ Update default zoom.
 
-✅ Extract data from interactions and use it in your flutter app.
+✅ Extract data from interactions and use it in your Flutter app.
 
-✅ Update Visibility of different parts of Model.
+✅ Update visibility of different parts of model.
+
+✅ Solid background color support — skip skybox while keeping IBL lighting quality.
+
+✅ Persistent selection cache with configurable cache color.
+
+✅ Selection sequence rules with bidirectional and tied group support.
+
+✅ Device-adaptive quality on Android — MSAA, supersampling, and render quality auto-tuning.
+
+✅ Adaptive frame pacing — saves battery when model is idle.
 
 ## Generate IBL & Skybox
 
@@ -57,6 +67,8 @@ Lastly, if you're loading `.gltf` do the following:
 
 ```dart
 Interactive3d(
+                // NEW: Solid background (skips skybox, keeps IBL lighting)
+                solidBackgroundColor: [0.92, 0.92, 0.92, 1.0],
                 modelPath: 'assets/models/Tooth-2.gltf',
                 // ibl and skybox are background envs
                 iblPath: 'assets/models/venetian_crossroads_2k_ibl.ktx',
@@ -99,6 +111,8 @@ and if you're loading `.glb` then resources is not necessary just do the followi
 
 ```dart
 Interactive3d(
+                // NEW: Solid background (skips skybox, keeps IBL lighting)
+                solidBackgroundColor: [0.92, 0.92, 0.92, 1.0],
                 modelPath: 'assets/models/heart.glb',
                 // ibl and skybox are background envs
                 iblPath: 'assets/models/venetian_crossroads_2k_ibl.ktx',

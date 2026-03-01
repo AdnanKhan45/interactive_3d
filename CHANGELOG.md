@@ -1,3 +1,13 @@
+## 2.0.0
+
+* 9th release of `interactive_3d` — **Major Release** 🚀
+- **BREAKING CHANGE:**
+  - Android rendering migrated from Hybrid Composition (AndroidView) to **Texture API (SurfaceProducer)** — dramatically improved performance and instant tap response.
+  - iOS memory management optimized to prevent leaks and crashes.
+
+- **New Feature (Both Platforms):**
+  - `solidBackgroundColor` — use a solid color background instead of IBL skybox while keeping IBL lighting for PBR quality.
+
 ## 1.2.4
 
 * 8th release of `interactive_3d`.
