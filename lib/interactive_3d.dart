@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -179,12 +178,10 @@ class Interactive3dState extends State<Interactive3d> {
   bool _isInitializing = false;
 
   // ── iOS (PlatformView) ──
-  int? _iosViewId;
   MethodChannel? _iosMethodChannel;
   StreamSubscription? _iosEventSubscription;
 
   // ── Shared ──
-  bool _isLoaded = false;
   StreamSubscription<List<EntityData>>? _selectionSubscription;
   StreamSubscription<List<String>>? _cacheSelectionSubscription;
   Size? _currentSize;
@@ -257,7 +254,6 @@ class Interactive3dState extends State<Interactive3d> {
   }
 
   void _onIOSPlatformViewCreated(int viewId) {
-    _iosViewId = viewId;
     _iosMethodChannel = MethodChannel('interactive_3d_$viewId');
     final eventChannel = EventChannel('interactive_3d_events_$viewId');
 
@@ -349,7 +345,6 @@ class Interactive3dState extends State<Interactive3d> {
         });
       }
 
-      _isLoaded = true;
     } catch (e) {
       debugPrint('Error loading iOS model: $e');
     }
@@ -398,7 +393,6 @@ class Interactive3dState extends State<Interactive3d> {
 
       await _loadAndroidModelAndEnvironment();
 
-      _isLoaded = true;
     } catch (e) {
       debugPrint('Error initializing texture: $e');
     } finally {
