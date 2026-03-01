@@ -1,12 +1,15 @@
-import 'package:plugin_platform_interface/plugin_platform_interface.dart';
-import 'interactive_3d.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
-/// Platform interface for the Interactive3d plugin.
+import 'package:plugin_platform_interface/plugin_platform_interface.dart';
+
+import 'models.dart';
+
+/// Platform interface for the interactive_3d plugin.
 ///
-/// This interface defines the contract for texture-based 3D rendering
-/// using Flutter's SurfaceProducer API.
+/// Defines the contract that platform-specific implementations must fulfil.
+/// Currently only [MethodChannelInteractive3d] (Android Texture API) implements
+/// this interface. iOS uses a PlatformView with its own method channel.
 abstract class Interactive3dPlatform extends PlatformInterface {
   Interactive3dPlatform() : super(token: _token);
 
@@ -16,17 +19,16 @@ abstract class Interactive3dPlatform extends PlatformInterface {
     PlatformInterface.verifyToken(instance, _token);
   }
 
-  /// Creates a new texture for 3D rendering.
-  /// Returns a map containing 'textureId'.
+  /// Creates a GPU-backed texture and returns `{'textureId': int}`.
   Future<Map<String, dynamic>> createTexture({
     required int width,
     required int height,
   });
 
-  /// Disposes a texture and releases all associated resources.
+  /// Releases the texture and all associated native resources.
   Future<void> disposeTexture(int textureId);
 
-  /// Loads a 3D model into the specified texture.
+  /// Loads a 3D model into the renderer bound to [textureId].
   Future<void> loadModel({
     required int textureId,
     String? modelPath,
@@ -39,10 +41,10 @@ abstract class Interactive3dPlatform extends PlatformInterface {
     List<double>? cacheColor,
     bool clearSelectionsOnHighlight = false,
     List<SequenceConfig>? selectionSequence,
-    final List<double>? backgroundColor
+    List<double>? backgroundColor,
   });
 
-  /// Loads environment lighting into the specified texture.
+  /// Loads IBL and skybox environment lighting.
   Future<void> loadEnvironment({
     required int textureId,
     String? iblPath,
@@ -51,7 +53,7 @@ abstract class Interactive3dPlatform extends PlatformInterface {
     String? skyboxUrl,
   });
 
-  /// Loads HDR/EXR background for iOS.
+  /// Loads an HDR/EXR background (iOS only).
   Future<void> loadHdrBackground({
     required int textureId,
     String? backgroundPath,
@@ -61,26 +63,29 @@ abstract class Interactive3dPlatform extends PlatformInterface {
   /// Sets the camera zoom level.
   Future<void> setCameraZoomLevel(int textureId, double zoom);
 
-  /// Updates visibility for a model part group.
+  /// Toggles visibility for a group of model parts.
   Future<void> updatePartGroupConfig({
     required int textureId,
     required bool isVisible,
     required ModelPartGroup group,
   });
 
-  /// Unselects entities in the 3D model.
-  Future<void> unselectEntities({required int textureId, List<int>? entityIds});
+  /// Unselects entities by ID, or all if [entityIds] is null.
+  Future<void> unselectEntities({
+    required int textureId,
+    List<int>? entityIds,
+  });
 
-  /// Clears the selection cache.
+  /// Clears the persistent selection cache.
   Future<void> clearCache(int textureId);
 
-  /// Refreshes cache highlights.
+  /// Re-applies cache highlight colors.
   Future<void> refreshCacheHighlights(int textureId);
 
-  /// Removes specific entities from cache.
+  /// Removes specific entities from the cache by name.
   Future<void> removeFromCache(int textureId, List<String> names);
 
-  /// Sends a touch event to the native side.
+  /// Forwards a touch event to the native renderer.
   Future<void> onTouchEvent({
     required int textureId,
     required String action,
@@ -91,9 +96,9 @@ abstract class Interactive3dPlatform extends PlatformInterface {
     double? scale,
   });
 
-  /// Stream to receive selection changes for a specific texture.
+  /// Stream of selection changes for a given texture.
   Stream<List<EntityData>> selectionStream(int textureId);
 
-  /// Stream to receive cached selection changes for a specific texture.
+  /// Stream of cache selection changes for a given texture.
   Stream<List<String>> cacheSelectionStream(int textureId);
 }

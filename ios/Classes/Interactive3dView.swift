@@ -1,71 +1,30 @@
 import Flutter
 import UIKit
 import SceneKit
-import GLTFSceneKit
 
-/// Weak wrapper to break retain cycle between FlutterEventChannel and Interactive3DPlatformView.
-/// FlutterEventChannel holds its stream handler STRONGLY — if the handler is self,
-/// self can never be deallocated. This wrapper holds a weak reference instead.
-private class WeakStreamHandler: NSObject, FlutterStreamHandler {
-    weak var delegate: (FlutterStreamHandler & AnyObject)?
-    
-    init(delegate: FlutterStreamHandler & AnyObject) {
-        self.delegate = delegate
-    }
-    
-    func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
-        return delegate?.onListen(withArguments: arguments, eventSink: events)
-    }
-    
-    func onCancel(withArguments arguments: Any?) -> FlutterError? {
-        return delegate?.onCancel(withArguments: arguments)
-    }
-}
-
+/// The main platform view for the interactive_3d plugin on iOS.
+///
+/// Owns the SCNView and coordinates sub-managers for scene loading
+/// ([SceneManager]), entity selection ([SelectionHandler]), and
+/// sequence validation ([SequenceValidator]). Method calls from Dart
+/// are dispatched to the appropriate manager.
 class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHandler {
-    
-    // 3D Model Core Related
-    
+
     private let scnView: SCNView
     private let methodChannel: FlutterMethodChannel
     private let eventChannel: FlutterEventChannel
     private var eventSink: FlutterEventSink?
-    private var selectedNodes: Set<SCNNode> = []
-    private var originalMaterials: [SCNNode: SCNMaterial] = [:]
-    private var cameraNode: SCNNode?
+
+    // Sub-managers
+    private let sceneManager: SceneManager
+    private let selection: SelectionHandler
+    private let sequenceValidator: SequenceValidator
+
+    // State
     private var pendingPreselectedEntities: [String]?
-    private var nodeOpacities: [SCNNode: CGFloat] = [:]
-    private var patchColors: [[String: Any]]?
-    private var selectionColor: [Double]?
-    private var clearSelectionsOnHighlight: Bool = false
-    
-    // Cache Related
-    
-    private var cacheManager: Interactive3DCacheManager?
-    private var enableCache: Bool = false
-    private var cacheColor: UIColor = UIColor(red: 0.8, green: 0.8, blue: 0.2, alpha: 0.6) // default cache color
-    private var modelCacheKey: String = ""
-    
-    // Sequence Selection Related
-    
-    struct SequenceConfig {
-        let group: String
-        let order: [String]
-        let bidirectional: Bool
-        let tiedGroup: String?
-    }
-    
-    private var sequenceConfigs: [SequenceConfig] = []
-    private var allowedNext: [String: Set<String>] = [:]
-    private var startNodes: Set<String> = []
+    private var isDisposed = false
 
-
-    init(
-        frame: CGRect,
-        viewId: Int64,
-        messenger: FlutterBinaryMessenger,
-        args: Any?
-    ) {
+    init(frame: CGRect, viewId: Int64, messenger: FlutterBinaryMessenger, args: Any?) {
         scnView = SCNView(frame: frame.isEmpty ? UIScreen.main.bounds : frame)
         scnView.autoenablesDefaultLighting = false
         scnView.allowsCameraControl = true
@@ -82,648 +41,30 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             binaryMessenger: messenger
         )
 
+        sceneManager = SceneManager(scnView: scnView)
+        selection = SelectionHandler()
+        sequenceValidator = SequenceValidator()
+
         super.init()
 
-        // FIX 1: Use [weak self] to break retain cycle
-         // Previously: methodChannel.setMethodCallHandler(handleMethodCall)
-         // That captures self STRONGLY → deinit never fires → all cleanup is dead code
-         methodChannel.setMethodCallHandler { [weak self] call, result in
-             self?.handleMethodCall(call, result: result)
-         }
-         
-         // FIX 2: Wrap in WeakStreamHandler to break retain cycle
-         // Previously: eventChannel.setStreamHandler(self) — holds self strongly
-         eventChannel.setStreamHandler(WeakStreamHandler(delegate: self))
+        // Use [weak self] to break retain cycle with method channel
+        methodChannel.setMethodCallHandler { [weak self] call, result in
+            self?.handleMethodCall(call, result: result)
+        }
+        // Wrap in WeakStreamHandler to break retain cycle with event channel
+        eventChannel.setStreamHandler(WeakStreamHandler(delegate: self))
 
         let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
         scnView.addGestureRecognizer(tapGesture)
 
-        let scene = SCNScene()
-        scnView.scene = scene
-
-        NSLog("SCNView initialized with frame: \(scnView.frame)")
+        scnView.scene = SCNScene()
     }
 
     func view() -> UIView {
-            return scnView
-        }
-        
-        // MARK: - Cleanup and Memory Management
-    
-        // Background
-        private var useSolidBackground = false
-        
-        /// Track whether cleanup has already run (prevent double-cleanup)
-        private var isDisposed = false
-        
-        deinit {
-            NSLog("Interactive3DPlatformView deinit called")
-            cleanup()
-        }
-        
-        /// Public dispose — called explicitly from the plugin when Flutter disposes the widget.
-        /// This is the PRIMARY cleanup path. deinit is backup only.
-        func dispose() {
-            NSLog("Interactive3DPlatformView dispose() called explicitly")
-            cleanup()
-        }
-        
-        /// Comprehensive cleanup of all resources to prevent memory leaks
-        private func cleanup() {
-            // Guard against double-cleanup
-            guard !isDisposed else {
-                NSLog("Already disposed, skipping cleanup")
-                return
-            }
-            isDisposed = true
-            
-            // 1. Break ALL retain cycles FIRST — this is what allows deallocation
-            methodChannel.setMethodCallHandler(nil)
-            eventChannel.setStreamHandler(nil)
-            eventSink = nil
-            NSLog("Broke retain cycles (channels cleared)")
-            
-            // 2. Remove gesture recognizers to break target-action retain cycle
-            if let gestures = scnView.gestureRecognizers {
-                for gesture in gestures {
-                    scnView.removeGestureRecognizer(gesture)
-                }
-            }
-            
-            // 3. Stop rendering BEFORE clearing scene (prevents render-during-teardown crashes)
-            scnView.isPlaying = false
-            scnView.stop(nil)
-            
-            // 4. Clear all selection state
-            selectedNodes.removeAll()
-            
-            // 5. Clear all cached materials — release strong SCNNode references
-            originalMaterials.removeAll()
-            nodeOpacities.removeAll()
-            
-            // 6. Clear sequence configs
-            sequenceConfigs.removeAll()
-            allowedNext.removeAll()
-            startNodes.removeAll()
-            
-            // 7. Clear cache manager
-            cacheManager = nil
-            
-            // 8. Deep-clean the scene — release geometry, materials, textures
-            if let scene = scnView.scene {
-                scene.rootNode.enumerateChildNodes { (node, _) in
-                    // Release geometry and all materials to free GPU memory
-                    if let geometry = node.geometry {
-                        for material in geometry.materials {
-                            material.diffuse.contents = nil
-                            material.normal.contents = nil
-                            material.emission.contents = nil
-                            material.multiply.contents = nil
-                            material.specular.contents = nil
-                            material.roughness.contents = nil
-                            material.metalness.contents = nil
-                            material.ambientOcclusion.contents = nil
-                        }
-                        geometry.materials = []
-                        node.geometry = nil
-                    }
-                    node.removeFromParentNode()
-                }
-                scene.rootNode.geometry = nil
-                scene.background.contents = nil
-                scene.lightingEnvironment.contents = nil
-            }
-            
-            // 9. Detach scene from view
-            scnView.scene = nil
-            
-            // 10. Force Metal/GPU resource release NOW instead of waiting for next GC
-            SCNTransaction.flush()
-            
-            // 11. Clear references
-            patchColors = nil
-            selectionColor = nil
-            pendingPreselectedEntities = nil
-            cameraNode = nil
-            
-            NSLog("Interactive3DPlatformView cleanup completed — all resources released")
-        }
-
-    private func handleMethodCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        switch call.method {
-        case "loadModel":
-            guard let args = call.arguments as? [String: Any],
-                  let modelBytes = (args["modelBytes"] as? FlutterStandardTypedData)?.data else {
-                result(FlutterError(
-                    code: "INVALID_ARGUMENT",
-                    message: "modelBytes is required or invalid",
-                    details: nil
-                ))
-                return
-            }
-            let preselectedEntities = args["preselectedEntities"] as? [String]
-            let patchColors = args["patchColors"] as? [[String: Any]]
-            let selectionColor = args["selectionColor"] as? [Double]
-            let clearSelectionsOnHighlight = (args["clearSelectionsOnHighlight"] as? Bool) ?? false
-            
-            if let seqArray = args["selectionSequence"] as? [[String: Any]] {
-                sequenceConfigs = seqArray.compactMap { dict in
-                    guard let group = dict["group"] as? String,
-                          let order = dict["order"] as? [String],
-                          let bidirectional = dict["bidirectional"] as? Bool else { return nil }
-                    let tiedGroup = dict["tiedGroup"] as? String
-                            return SequenceConfig(
-                                group: group,
-                                order: order,
-                                bidirectional: bidirectional,
-                                tiedGroup: tiedGroup
-                            )
-                }
-                buildSequenceMaps()
-            }
-            
-            // Cache params from Dart
-            enableCache = (args["enableCache"] as? Bool) ?? false
-            if let cacheColorArray = args["cacheColor"] as? [Double], cacheColorArray.count == 4 {
-                cacheColor = UIColor(
-                    red: CGFloat(cacheColorArray[0]),
-                    green: CGFloat(cacheColorArray[1]),
-                    blue: CGFloat(cacheColorArray[2]),
-                    alpha: CGFloat(cacheColorArray[3])
-                )
-            }
-            // Use model name/path/url as a key (fallback to uuid if missing)
-            if let modelName = args["name"] as? String {
-                modelCacheKey = modelName
-            } else {
-                modelCacheKey = UUID().uuidString
-            }
-            if enableCache {
-                cacheManager = Interactive3DCacheManager(modelKey: modelCacheKey, cacheColor: cacheColor)
-                cacheManager?.onCacheChanged = { [weak self] cached in
-                    self?.sendCacheSelectionUpdate()
-                }
-            } else {
-                cacheManager = nil
-            }
-            
-            // Handle solid background color
-            if let bgColor = args["backgroundColor"] as? [Double], bgColor.count >= 3 {
-                let alpha = bgColor.count >= 4 ? CGFloat(bgColor[3]) : 1.0
-                useSolidBackground = true
-                scnView.backgroundColor = UIColor(
-                    red: CGFloat(bgColor[0]),
-                    green: CGFloat(bgColor[1]),
-                    blue: CGFloat(bgColor[2]),
-                    alpha: alpha
-                )
-                NSLog("Set solid background color: \(bgColor)")
-            } else {
-                useSolidBackground = false
-            }
-
-            DispatchQueue.main.async { [weak self] in
-                do {
-                    self?.pendingPreselectedEntities = preselectedEntities
-                    self?.clearSelectionsOnHighlight = clearSelectionsOnHighlight
-                    self?.patchColors = patchColors
-                    self?.selectionColor = selectionColor
-                    try self?.loadModel(modelBytes: modelBytes)
-                    result(nil)
-                } catch {
-                    result(FlutterError(
-                        code: "LOAD_ERROR",
-                        message: "Failed to load model: \(error.localizedDescription)",
-                        details: error
-                    ))
-                }
-            }
-
-        case "setZoomLevel":
-            guard let args = call.arguments as? [String: Any],
-                  let zoomLevel = args["zoom"] as? Double else {
-                result(FlutterError(
-                    code: "INVALID_ARGUMENT",
-                    message: "zoomLevel is required and must be a double",
-                    details: nil
-                ))
-                return
-            }
-
-            DispatchQueue.main.async { [weak self] in
-                self?.setCameraZoomLevel(zoomLevel: Float(zoomLevel))
-                result(nil)
-            }
-            
-        case "loadHdrBackground":
-            guard let args = call.arguments as? [String: Any],
-                  let backgroundBytes = (args["backgroundBytes"] as? FlutterStandardTypedData)?.data else {
-                result(FlutterError(
-                    code: "INVALID_ARGUMENT",
-                    message: "backgroundBytes is required or invalid",
-                    details: nil
-                ))
-                return
-            }
-
-            DispatchQueue.main.async { [weak self] in
-                do {
-                    try self?.loadHdrBackgroundFromBytes(backgroundBytes)
-                    result(nil)
-                } catch {
-                    result(FlutterError(
-                        code: "LOAD_ERROR",
-                        message: "Failed to load HDR/EXR background: \(error.localizedDescription)",
-                        details: error
-                    ))
-                }
-            }
-
-        case "unselectEntities":
-            let entityIds = call.arguments as? [Int]
-            DispatchQueue.main.async { [weak self] in
-                self?.unselectEntities(entityIds: entityIds)
-                result(nil)
-            }
-            
-        case "setPartGroupVisibility":
-             guard let args = call.arguments as? [String: Any],
-                   let group = args["group"] as? [String: Any],
-                   let visibility = args["visibility"] as? [String: Bool],
-                   let title = group["title"] as? String,
-                   let isVisible = visibility[title] else {
-                 result(FlutterError(
-                     code: "INVALID_ARGUMENT",
-                     message: "Invalid group or visibility data",
-                     details: nil
-                 ))
-                 return
-             }
-
-             DispatchQueue.main.async { [weak self] in
-                 self?.setPartGroupVisibility(group: group, isVisible: isVisible)
-                 result(nil)
-             }
-        case "clearCache":
-            if enableCache, let cacheMgr = cacheManager {
-                let entitiesToClear = Array(cacheMgr.cachedEntities)
-                cacheMgr.clearCache()
-                var nodesRestored = 0
-                scnView.scene?.rootNode.enumerateChildNodes { (node, _) in
-                    if let nodeName = node.name, entitiesToClear.contains(nodeName) {
-                        if let geometryNode = findGeometryNode(in: node) {
-                            resetNodeColor(geometryNode)
-                            nodesRestored += 1
-                        }
-                    }
-                }
-                // Remove restored nodes from originalMaterials, so re-highlighting works as expected later
-                for (node, _) in originalMaterials {
-                    if let nodeName = node.name, entitiesToClear.contains(nodeName) {
-                        originalMaterials.removeValue(forKey: node)
-                    }
-                }
-                sendCacheSelectionUpdate()
-                NSLog("Cleared cache, restored \(nodesRestored) node materials")
-                result(nil)
-            } else {
-                result(FlutterError(code: "CACHE_DISABLED", message: "Cache not enabled", details: nil))
-            }
-            
-        case "refreshCacheHighlights":
-            DispatchQueue.main.async { [weak self] in
-                self?.refreshCacheHighlights()
-                result(nil)
-            }
-        case "removeFromCache":
-            guard let names = call.arguments as? [String] else {
-                result(FlutterError(code: "INVALID_ARGUMENT", message: "names required", details: nil))
-                return
-            }
-            DispatchQueue.main.async { [weak self] in
-                self?.removeFromCache(names: names)
-                result(nil)
-            }
-        case "dispose":
-                  DispatchQueue.main.async { [weak self] in
-                      self?.dispose()
-                      result(nil)
-                  }
-
-
-        default:
-            result(FlutterMethodNotImplemented)
-        }
-    }
-    
-    private func buildSequenceMaps() {
-        allowedNext.removeAll()
-        for config in sequenceConfigs {
-            let list = config.order
-            for (i, name) in list.enumerated() where i < list.count - 1 {
-                let nextName = list[i + 1]
-                // forward always allowed
-                allowedNext[name, default: []].insert(nextName)
-                // backward only if bidirectional
-                if config.bidirectional {
-                    allowedNext[nextName, default: []].insert(name)
-                }
-            }
-        }
+        return scnView
     }
 
-    private func isTapAllowed(_ nodeName: String) -> Bool {
-        // Always allow un‑selecting
-        if selectedNodes.contains(where: { $0.name == nodeName }) {
-            return true
-        }
-
-        // Find the config and index for this node
-        guard let config = sequenceConfigs.first(where: { $0.order.contains(nodeName) }),
-              let idx    = config.order.firstIndex(of: nodeName)
-        else {
-            return true  // not part of any sequence → free
-        }
-
-        // What’s already selected in this group?
-        let selectedInGroup = selectedNodes
-            .compactMap { $0.name }
-            .filter    { config.order.contains($0) }
-
-        // What’s selected in the tied group (if any)?
-        var selectedInTied: [String] = []
-        if let tiedName = config.tiedGroup,
-           let tiedConfig = sequenceConfigs.first(where: { $0.group == tiedName }) {
-            selectedInTied = selectedNodes
-                .compactMap { $0.name }
-                .filter    { tiedConfig.order.contains($0) }
-        }
-
-        // If this group hasn’t started yet…
-        if selectedInGroup.isEmpty {
-            // other group started → enforce matching index
-            if !selectedInTied.isEmpty,
-               let tiedName = config.tiedGroup,
-               let tiedConfig = sequenceConfigs.first(where: { $0.group == tiedName }) {
-                let requiredNode = tiedConfig.order[idx]
-                return selectedInTied.contains(requiredNode)
-            }
-            // otherwise free first pick
-            return true
-        }
-
-        // Once started → only adjacent via allowedNext
-        for name in selectedInGroup {
-            if allowedNext[name]?.contains(nodeName) == true {
-                return true
-            }
-        }
-
-        // Everything else is rejected
-        return false
-    }
-
-    
-    /// Cleans up the previous model's resources before loading a new one
-    /// This prevents memory accumulation across multiple model loads
-    private func cleanupPreviousModel() {
-            // 1. Clear selections — release strong node references
-            selectedNodes.removeAll()
-            
-            // 2. Clear all material backups
-            let materialCount = originalMaterials.count
-            originalMaterials.removeAll()
-            NSLog("Cleared \(materialCount) original materials")
-            
-            // 3. Clear node opacities tracking
-            nodeOpacities.removeAll()
-            
-            // 4. Deep-clean: release geometry, materials, textures from all nodes
-            if let currentScene = scnView.scene {
-                currentScene.rootNode.enumerateChildNodes { (node, _) in
-                    if let geometry = node.geometry {
-                        // Release all material texture contents to free GPU memory
-                        for material in geometry.materials {
-                            material.diffuse.contents = nil
-                            material.normal.contents = nil
-                            material.emission.contents = nil
-                            material.multiply.contents = nil
-                            material.specular.contents = nil
-                            material.roughness.contents = nil
-                            material.metalness.contents = nil
-                            material.ambientOcclusion.contents = nil
-                        }
-                        geometry.materials = []
-                        node.geometry = nil
-                    }
-                    node.removeFromParentNode()
-                }
-                currentScene.background.contents = nil
-                currentScene.lightingEnvironment.contents = nil
-                NSLog("Deep-cleaned all nodes from previous scene")
-            }
-            
-            // 5. Force Metal/GPU resource flush NOW
-            SCNTransaction.flush()
-            
-            // 6. Clear pending state
-            pendingPreselectedEntities = nil
-            cameraNode = nil
-            
-            NSLog("Previous model cleanup completed")
-        }
-    
-    private func loadModel(modelBytes: Data) throws {
-        NSLog("Received modelBytes with size: \(modelBytes.count) bytes")
-        let firstBytes = modelBytes.prefix(16).map { String(format: "%02x", $0) }.joined(separator: " ")
-        NSLog("First 16 bytes: \(firstBytes)")
-        
-        // CRITICAL: Clean up previous model resources before loading new one
-        cleanupPreviousModel()
-
-        let scene: SCNScene
-        do {
-            let sceneSource = SCNSceneSource(data: modelBytes, options: [
-                SCNSceneSource.LoadingOption.createNormalsIfAbsent: true,
-                SCNSceneSource.LoadingOption.checkConsistency: true
-            ])
-            guard let loadedScene = sceneSource?.scene(options: nil) else {
-                throw NSError(domain: "Interactive3DPlugin", code: -1, userInfo: [NSLocalizedDescriptionKey: "SCNSceneSource failed to load scene from data"])
-            }
-            scene = loadedScene
-            NSLog("Successfully loaded GLB with SCNSceneSource")
-        } catch {
-            NSLog("SCNSceneSource failed: \(error.localizedDescription). Trying GLTFSceneSource.")
-            let tempDir = NSTemporaryDirectory()
-            let tempFilePath = tempDir.appending("model.glb")
-            do {
-                try modelBytes.write(to: URL(fileURLWithPath: tempFilePath))
-                defer { try? FileManager.default.removeItem(atPath: tempFilePath) }
-                let gltfSource = try GLTFSceneSource(url: URL(fileURLWithPath: tempFilePath))
-                scene = try gltfSource.scene()
-                NSLog("Successfully loaded GLB with GLTFSceneSource")
-            } catch {
-                NSLog("GLTFSceneSource failed: \(error.localizedDescription)")
-                throw NSError(domain: "Interactive3DPlugin", code: -2, userInfo: [NSLocalizedDescriptionKey: "Failed to load GLB: \(error.localizedDescription)"])
-            }
-        }
-
-        var geometryCount = 0
-        scene.rootNode.enumerateChildNodes { (node, _) in
-            if let geometry = node.geometry {
-                geometryCount += 1
-                if geometry.materials.isEmpty || geometry.firstMaterial?.diffuse.contents == nil {
-                    let fallbackMaterial = SCNMaterial()
-                    fallbackMaterial.diffuse.contents = UIColor.green
-                    fallbackMaterial.isDoubleSided = true
-                    geometry.materials = [fallbackMaterial]
-                    NSLog("Applied fallback green material to node: \(node.name ?? "Unnamed")")
-                } else {
-                    NSLog("Node: \(node.name ?? "Unnamed") has material with diffuse: \(String(describing: geometry.firstMaterial?.diffuse.contents))")
-                }
-            }
-        }
-        NSLog("Total geometry nodes: \(geometryCount)")
-
-        if geometryCount == 0 {
-            NSLog("Warning: Model has no geometry, adding blue test cube")
-            let box = SCNBox(width: 1, height: 1, length: 1, chamferRadius: 0)
-            let material = SCNMaterial()
-            material.diffuse.contents = UIColor.blue
-            material.isDoubleSided = true
-            box.materials = [material]
-            let boxNode = SCNNode(geometry: box)
-            boxNode.position = SCNVector3(0, 0, 0)
-            material.diffuse.contentsTransform = SCNMatrix4MakeScale(1, 1, 1)
-            material.normal.mipFilter = .linear
-            material.normal.intensity = 1.0
-            
-            
-            scene.rootNode.addChildNode(boxNode)
-        }
-
-        if !hasLightNodes(in: scene.rootNode) {
-            let ambientLight = SCNNode()
-            ambientLight.light = SCNLight()
-            ambientLight.light!.type = .ambient
-            ambientLight.light!.color = UIColor.white
-            ambientLight.light!.intensity = 1000
-            scene.rootNode.addChildNode(ambientLight)
-
-            let directionalLight = SCNNode()
-            directionalLight.light = SCNLight()
-            directionalLight.light!.type = .directional
-            directionalLight.light!.color = UIColor.white
-            directionalLight.light!.intensity = 2000
-            directionalLight.position = SCNVector3(x: 10, y: 10, z: 10)
-            directionalLight.look(at: SCNVector3Zero)
-            scene.rootNode.addChildNode(directionalLight)
-            NSLog("Added default lighting")
-        }
-
-        scnView.scene = scene
-        
-        // Apply Cache
-    
-        if enableCache, let cacheMgr = cacheManager {
-            for cachedName in cacheMgr.cachedEntities {
-                scnView.scene?.rootNode.enumerateChildNodes { (node, _) in
-                    if let nodeName = node.name, nodeName == cachedName {
-                        if let geometryNode = findGeometryNode(in: node) {
-                            applyCacheHighlight(to: geometryNode, forNodeName: nodeName)
-                        }
-                    }
-                }
-            }
-            // Optionally: emit current cache as event
-            sendCacheSelectionUpdate()
-        }
-
-        applyPreselectedEntities()
-
-        printSceneHierarchy(scene.rootNode, level: 0)
-        NSLog("Camera point of view: \(scnView.pointOfView?.name ?? "None")")
-        NSLog("Scene node count: \(scene.rootNode.childNodes.count)")
-        NSLog("SCNView bounds: \(scnView.bounds)")
-    }
-    
-    private func applyCacheHighlight(to node: SCNNode, forNodeName nodeName: String?) {
-        guard let geometry = node.geometry, let material = geometry.firstMaterial else { return }
-        if originalMaterials[node] == nil {
-            originalMaterials[node] = material.copy() as? SCNMaterial
-        }
-        material.diffuse.contents = cacheColor
-        material.emission.contents = cacheColor.withAlphaComponent(0.2)
-        material.multiply.contents = cacheColor
-    }
-
-
-    private func applyPreselectedEntities() {
-        guard let preselectedEntities = pendingPreselectedEntities, !preselectedEntities.isEmpty else {
-            NSLog("No preselected entities to apply")
-            return
-        }
-
-        scnView.scene?.rootNode.enumerateChildNodes { (node, _) in
-            if let nodeName = node.name, preselectedEntities.contains(nodeName) {
-                guard let geometryNode = findGeometryNode(in: node) else {
-                    NSLog("No geometry node found for preselected: \(nodeName)")
-                    return
-                }
-                selectedNodes.insert(node)
-                applyHighlight(to: geometryNode, forNodeName: nodeName)
-                NSLog("Preselected node: \(nodeName)")
-            }
-        }
-        sendSelectionUpdate()
-        pendingPreselectedEntities = nil
-    }
-
-    private func unselectEntities(entityIds: [Int]?) {
-        if let ids = entityIds {
-            // Unselect specific entities
-            let nodesToRemove = selectedNodes.filter { ids.contains($0.hash) }
-            for node in nodesToRemove {
-                if let geometryNode = findGeometryNode(in: node) {
-                    resetNodeColor(geometryNode)
-                    selectedNodes.remove(node)
-                    NSLog("Unselected node: \(node.name ?? "Unnamed")")
-                }
-            }
-        } else {
-            // Clear all selections
-            for node in selectedNodes {
-                if let geometryNode = findGeometryNode(in: node) {
-                    resetNodeColor(geometryNode)
-                    NSLog("Unselected node: \(node.name ?? "Unnamed")")
-                }
-            }
-            selectedNodes.removeAll()
-        }
-        sendSelectionUpdate()
-    }
-
-    private func setCameraZoomLevel(zoomLevel: Float) {
-        guard let cameraNode = cameraNode, zoomLevel > 0 else {
-            NSLog("Cannot set zoom level: no camera node or invalid zoomLevel")
-            return
-        }
-        cameraNode.position = SCNVector3(x: 0, y: 0, z: zoomLevel)
-        cameraNode.camera!.zNear = 0.01
-        NSLog("Updated camera zoomLevel: \(zoomLevel), position: \(cameraNode.position)")
-    }
-
-    private func hasLightNodes(in node: SCNNode) -> Bool {
-        if node.light != nil {
-            return true
-        }
-        for child in node.childNodes {
-            if hasLightNodes(in: child) {
-                return true
-            }
-        }
-        return false
-    }
+    // MARK: - FlutterStreamHandler
 
     func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
         self.eventSink = events
@@ -736,410 +77,330 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
         return nil
     }
 
-    private func sendSelectionUpdate() {
-        guard let eventSink = eventSink else { return }
-        let selectedEntities = selectedNodes.map { node in
-            ["id": node.hash, "name": node.name ?? "Unnamed"] as [String: Any]
+    // MARK: - Method Dispatch
+
+    private func handleMethodCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        switch call.method {
+        case "loadModel":
+            handleLoadModel(call, result: result)
+        case "setZoomLevel":
+            handleSetZoomLevel(call, result: result)
+        case "loadHdrBackground":
+            handleLoadHdrBackground(call, result: result)
+        case "unselectEntities":
+            handleUnselectEntities(call, result: result)
+        case "setPartGroupVisibility":
+            handleSetPartGroupVisibility(call, result: result)
+        case "clearCache":
+            handleClearCache(result: result)
+        case "refreshCacheHighlights":
+            handleRefreshCacheHighlights(result: result)
+        case "removeFromCache":
+            handleRemoveFromCache(call, result: result)
+        case "dispose":
+            DispatchQueue.main.async { [weak self] in
+                self?.dispose()
+                result(nil)
+            }
+        default:
+            result(FlutterMethodNotImplemented)
         }
-        let event: [String: Any] = [
-            "event": "selectionChanged",
-            "selectedEntities": selectedEntities
-        ]
-        eventSink(event)
-    }
-    
-    private func sendCacheSelectionUpdate() {
-        guard let eventSink = eventSink, enableCache, let cacheMgr = cacheManager else { return }
-        let cachedEntities = cacheMgr.cachedEntities.map { name in
-            ["name": name]
-        }
-        let event: [String: Any] = [
-            "event": "cacheSelectionChanged",
-            "cachedEntities": cachedEntities
-        ]
-        eventSink(event)
     }
 
+    // MARK: - Method Handlers
+
+    private func handleLoadModel(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any],
+              let modelBytes = (args["modelBytes"] as? FlutterStandardTypedData)?.data else {
+            result(FlutterError(code: "INVALID_ARGUMENT", message: "modelBytes required", details: nil))
+            return
+        }
+
+        // Configure selection
+        selection.selectionColor = args["selectionColor"] as? [Double]
+        selection.patchColors = args["patchColors"] as? [[String: Any]]
+        selection.clearSelectionsOnHighlight = (args["clearSelectionsOnHighlight"] as? Bool) ?? false
+        pendingPreselectedEntities = args["preselectedEntities"] as? [String]
+
+        // Configure sequence
+        if let seqArray = args["selectionSequence"] as? [[String: Any]] {
+            sequenceValidator.configure(from: seqArray)
+        }
+
+        // Configure cache
+        selection.enableCache = (args["enableCache"] as? Bool) ?? false
+        if let cacheColorArray = args["cacheColor"] as? [Double], cacheColorArray.count == 4 {
+            selection.cacheColor = UIColor(
+                red: CGFloat(cacheColorArray[0]),
+                green: CGFloat(cacheColorArray[1]),
+                blue: CGFloat(cacheColorArray[2]),
+                alpha: CGFloat(cacheColorArray[3])
+            )
+        }
+        let modelCacheKey = (args["name"] as? String) ?? UUID().uuidString
+        if selection.enableCache {
+            selection.cacheManager = Interactive3DCacheManager(
+                modelKey: modelCacheKey, cacheColor: selection.cacheColor
+            )
+            selection.cacheManager?.onCacheChanged = { [weak self] _ in
+                self?.sendCacheSelectionUpdate()
+            }
+        } else {
+            selection.cacheManager = nil
+        }
+
+        // Configure background
+        if let bgColor = args["backgroundColor"] as? [Double], bgColor.count >= 3 {
+            let alpha = bgColor.count >= 4 ? CGFloat(bgColor[3]) : 1.0
+            sceneManager.useSolidBackground = true
+            scnView.backgroundColor = UIColor(
+                red: CGFloat(bgColor[0]),
+                green: CGFloat(bgColor[1]),
+                blue: CGFloat(bgColor[2]),
+                alpha: alpha
+            )
+        } else {
+            sceneManager.useSolidBackground = false
+        }
+
+        // Reset previous selection state
+        selection.reset()
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            do {
+                try self.sceneManager.loadModel(modelBytes: modelBytes)
+
+                // Apply cache highlights
+                if let scene = self.scnView.scene {
+                    self.selection.highlightCachedEntities(in: scene)
+                }
+                self.sendCacheSelectionUpdate()
+
+                // Apply preselections
+                self.applyPreselectedEntities()
+
+                result(nil)
+            } catch {
+                result(FlutterError(code: "LOAD_ERROR", message: error.localizedDescription, details: nil))
+            }
+        }
+    }
+
+    private func handleSetZoomLevel(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any],
+              let zoom = args["zoom"] as? Double else {
+            result(FlutterError(code: "INVALID_ARGUMENT", message: "zoom required", details: nil))
+            return
+        }
+        DispatchQueue.main.async { [weak self] in
+            self?.sceneManager.setCameraZoomLevel(Float(zoom))
+            result(nil)
+        }
+    }
+
+    private func handleLoadHdrBackground(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any],
+              let bgBytes = (args["backgroundBytes"] as? FlutterStandardTypedData)?.data else {
+            result(FlutterError(code: "INVALID_ARGUMENT", message: "backgroundBytes required", details: nil))
+            return
+        }
+        DispatchQueue.main.async { [weak self] in
+            do {
+                try self?.sceneManager.loadHdrBackground(bgBytes)
+                result(nil)
+            } catch {
+                result(FlutterError(code: "LOAD_ERROR", message: error.localizedDescription, details: nil))
+            }
+        }
+    }
+
+    private func handleUnselectEntities(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let entityIds = call.arguments as? [Int]
+        DispatchQueue.main.async { [weak self] in
+            self?.selection.unselectEntities(entityIds: entityIds)
+            self?.sendSelectionUpdate()
+            result(nil)
+        }
+    }
+
+    private func handleSetPartGroupVisibility(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any],
+              let group = args["group"] as? [String: Any],
+              let visibility = args["visibility"] as? [String: Bool],
+              let title = group["title"] as? String,
+              let isVisible = visibility[title] else {
+            result(FlutterError(code: "INVALID_ARGUMENT", message: "Invalid group or visibility", details: nil))
+            return
+        }
+        DispatchQueue.main.async { [weak self] in
+            self?.sceneManager.setPartGroupVisibility(group: group, isVisible: isVisible)
+            result(nil)
+        }
+    }
+
+    private func handleClearCache(result: @escaping FlutterResult) {
+        guard let scene = scnView.scene else {
+            result(FlutterError(code: "CACHE_DISABLED", message: "No scene", details: nil))
+            return
+        }
+        selection.clearCache(in: scene)
+        sendCacheSelectionUpdate()
+        result(nil)
+    }
+
+    private func handleRefreshCacheHighlights(result: @escaping FlutterResult) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, let scene = self.scnView.scene else {
+                result(nil)
+                return
+            }
+            self.selection.refreshAllHighlights(in: scene)
+            self.sendSelectionUpdate()
+            self.sendCacheSelectionUpdate()
+            result(nil)
+        }
+    }
+
+    private func handleRemoveFromCache(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let names = call.arguments as? [String] else {
+            result(FlutterError(code: "INVALID_ARGUMENT", message: "names required", details: nil))
+            return
+        }
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, let scene = self.scnView.scene else {
+                result(nil)
+                return
+            }
+            self.selection.removeFromCache(names: names, in: scene)
+            self.sendSelectionUpdate()
+            self.sendCacheSelectionUpdate()
+            result(nil)
+        }
+    }
+
+    // MARK: - Tap Handling
 
     @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
         let location = gesture.location(in: scnView)
-        let hitResults = scnView.hitTest(location, options: [.searchMode: SCNHitTestSearchMode.all.rawValue])
+        let hitResults = scnView.hitTest(location, options: [
+            .searchMode: SCNHitTestSearchMode.all.rawValue
+        ])
+        guard let hit = hitResults.first else { return }
 
-        guard let result = hitResults.first else {
-            NSLog("Tapped empty space")
-            return
-        }
-
-        var targetNode: SCNNode? = result.node
-        var geometryNode: SCNNode? = targetNode
-        while geometryNode != nil && geometryNode!.geometry == nil {
-            geometryNode = geometryNode?.childNodes.first { $0.geometry != nil }
-        }
-        if geometryNode == nil {
-            geometryNode = findGeometryNode(in: targetNode!)
-        }
-
-        while targetNode != nil && (targetNode!.name == nil || targetNode!.name!.isEmpty || targetNode!.name!.starts(with: "Mesh.") || targetNode!.name!.hasSuffix(".001")) {
+        // Walk up the hierarchy to find the named parent node
+        var targetNode: SCNNode? = hit.node
+        while targetNode != nil &&
+              (targetNode!.name == nil ||
+               targetNode!.name!.isEmpty ||
+               targetNode!.name!.starts(with: "Mesh.") ||
+               targetNode!.name!.hasSuffix(".001")) {
             targetNode = targetNode?.parent
         }
 
-        let nameNode = targetNode ?? result.node
-        guard let highlightNode = geometryNode else {
-            NSLog("No geometry node found for: \(nameNode.name ?? "Unnamed")")
-            return
-        }
-
         guard let nameNode = targetNode, let nodeName = nameNode.name else { return }
-        guard let geometryNode = findGeometryNode(in: nameNode) else { return }
-        
-        guard isTapAllowed(nodeName) else {
-            NSLog("Tap rejected by sequence rule: \(nodeName)")
-            eventSink?( ["event": "selectionRejected", "name": nodeName] )
+        guard let geometryNode = selection.findGeometryNode(in: nameNode) else { return }
+
+        // Sequence validation
+        guard sequenceValidator.isTapAllowed(nodeName, selectedNodes: selection.selectedNodes) else {
+            eventSink?(["event": "selectionRejected", "name": nodeName])
             return
         }
 
-        // If the node is cached, remove from cache AND unselect
-        if enableCache, let cacheMgr = cacheManager, cacheMgr.isCached(nodeName) {
+        // If cached, remove from cache and deselect
+        if selection.enableCache,
+           let cacheMgr = selection.cacheManager,
+           cacheMgr.isCached(nodeName) {
             cacheMgr.removeFromCache(nodeName)
-            resetNodeColor(geometryNode)
-            NSLog("Removed from cache: \(nodeName)")
+            selection.resetNodeColor(geometryNode)
             sendCacheSelectionUpdate()
-
-            // If it was also selected, unselect it
-            if selectedNodes.contains(nameNode) {
-                selectedNodes.remove(nameNode)
-                NSLog("Deselected: \(nameNode.name ?? "Unnamed")")
+            if selection.selectedNodes.contains(nameNode) {
+                selection.selectedNodes.remove(nameNode)
                 sendSelectionUpdate()
             }
             return
         }
 
         // Toggle selection
-        if selectedNodes.contains(nameNode) {
-            selectedNodes.remove(nameNode)
-            resetNodeColor(highlightNode)
-            NSLog("Deselected: \(nameNode.name ?? "Unnamed")")
+        if selection.selectedNodes.contains(nameNode) {
+            selection.selectedNodes.remove(nameNode)
+            selection.resetNodeColor(geometryNode)
         } else {
-            selectedNodes.insert(nameNode)
-            applyHighlight(to: highlightNode, forNodeName: nameNode.name)
-            NSLog("Selected: \(nameNode.name ?? "Unnamed")")
-            if enableCache {
-                NSLog("Cached is \(enableCache) | Adding to cache: \(nodeName)")
-                cacheManager?.addToCache(nodeName)
+            selection.selectedNodes.insert(nameNode)
+            selection.applyHighlight(to: geometryNode, forNodeName: nameNode.name)
+            if selection.enableCache {
+                selection.cacheManager?.addToCache(nodeName)
             }
         }
 
         sendSelectionUpdate()
     }
 
-    private func findGeometryNode(in node: SCNNode) -> SCNNode? {
-            if node.geometry != nil {
-                return node
-            }
-            for child in node.childNodes {
-                if let found = findGeometryNode(in: child) {
-                    return found
-                }
-            }
-            return nil
-        }
+    // MARK: - Preselection
 
-    private func getEntityColor(nodeName: String?) -> UIColor {
-        // Check for patchColors first
-        if let nodeName = nodeName, let patchColors = patchColors {
-            for patch in patchColors {
-                if let name = patch["name"] as? String, name == nodeName {
-                    if let color = patch["color"] as? [Double], color.count == 4 {
-                        NSLog("Matched patch color for \(nodeName): \(color)")
-                        return UIColor(
-                            red: CGFloat(color[0]),
-                            green: CGFloat(color[1]),
-                            blue: CGFloat(color[2]),
-                            alpha: CGFloat(color[3])
-                        )
-                    }
-                }
-            }
-        }
+    private func applyPreselectedEntities() {
+        guard let names = pendingPreselectedEntities, !names.isEmpty else { return }
 
-        // Fallback to selectionColor if provided
-        if let color = selectionColor, color.count == 4 {
-            NSLog("Using selectionColor: \(color)")
-            return UIColor(
-                red: CGFloat(color[0]),
-                green: CGFloat(color[1]),
-                blue: CGFloat(color[2]),
-                alpha: CGFloat(color[3])
-            )
-        }
-
-        // Default to red if no selectionColor is provided
-        NSLog("Falling back to default red color")
-        return UIColor.red
-    }
-
-    private func applyHighlight(to node: SCNNode, forNodeName nodeName: String?) {
-        guard let geometry = node.geometry, let material = geometry.firstMaterial else {
-            NSLog("No geometry or material for node: \(node.name ?? "Unnamed")")
-            return
-        }
-        // Only save the original once per session/highlight cycle!
-        if originalMaterials[node] == nil {
-            originalMaterials[node] = material.copy() as? SCNMaterial
-        }
-        let highlightColor = getEntityColor(nodeName: nodeName)
-        material.diffuse.contents = highlightColor
-        material.emission.contents = highlightColor.withAlphaComponent(0.3)
-        material.multiply.contents = highlightColor
-        NSLog("Applied highlight color \(highlightColor) to: \(node.name ?? "Unnamed") for nodeName: \(nodeName ?? "None")")
-    }
-
-    private func resetNodeColor(_ node: SCNNode) {
-        guard let geometry = node.geometry else {
-            NSLog("No geometry to reset for node: \(node.name ?? "Unnamed")")
-            return
-        }
-        if let originalMaterial = originalMaterials[node] {
-            // Important: assign a *copy* to break pointer sharing!
-            geometry.materials = [originalMaterial.copy() as! SCNMaterial]
-            NSLog("Restored original material for: \(node.name ?? "Unnamed")")
-            // CRITICAL: Remove the reference immediately to prevent memory accumulation
-            originalMaterials.removeValue(forKey: node)
-        } else {
-            NSLog("No original material found for: \(node.name ?? "Unnamed")")
-        }
-    }
-
-    private func printSceneHierarchy(_ node: SCNNode, level: Int) {
-        let indent = String(repeating: "  ", count: level)
-        let nodeInfo = "\(indent)Node: \(node.name ?? "Unnamed") | Geometry: \(node.geometry?.name ?? "None") | Position: \(node.position) | Bounding Box: \(node.boundingBox)"
-        NSLog(nodeInfo)
-        for child in node.childNodes {
-            printSceneHierarchy(child, level: level + 1)
-        }
-    }
-    
-    private func loadHdrBackgroundFromBytes(_ backgroundBytes: Data) throws {
-        // Write the bytes to a temporary file
-        let tempDir = NSTemporaryDirectory()
-        let tempFilePath = tempDir.appending("background.hdr") // Use .hdr or .exr based on input
-        try backgroundBytes.write(to: URL(fileURLWithPath: tempFilePath))
-        defer { try? FileManager.default.removeItem(atPath: tempFilePath) }
-
-        // Load the HDR/EXR image
-        guard let image = UIImage(contentsOfFile: tempFilePath) else {
-            throw NSError(
-                domain: "Interactive3DPlugin",
-                code: -3,
-                userInfo: [NSLocalizedDescriptionKey: "Failed to load HDR/EXR image"]
-            )
-        }
-
-        // Maximum texture size supported by most iOS devices (Metal)
-        let maxTextureSize: CGFloat = 8192
-
-        // Check if the image exceeds the maximum texture size
-        let imageSize = image.size
-        var targetSize = imageSize
-        if imageSize.width > maxTextureSize || imageSize.height > maxTextureSize {
-            let aspectRatio = imageSize.width / imageSize.height
-            if imageSize.width > imageSize.height {
-                targetSize = CGSize(width: maxTextureSize, height: maxTextureSize / aspectRatio)
-            } else {
-                targetSize = CGSize(width: maxTextureSize * aspectRatio, height: maxTextureSize)
-            }
-            NSLog("Resizing HDR/EXR image from \(imageSize) to \(targetSize)")
-        }
-
-        // Resize the image if necessary
-        let resizedImage: UIImage
-        if targetSize != imageSize {
-            UIGraphicsBeginImageContextWithOptions(targetSize, false, 1.0)
-            defer { UIGraphicsEndImageContext() }
-            image.draw(in: CGRect(origin: .zero, size: targetSize))
-            guard let scaledImage = UIGraphicsGetImageFromCurrentImageContext() else {
-                throw NSError(
-                    domain: "Interactive3DPlugin",
-                    code: -4,
-                    userInfo: [NSLocalizedDescriptionKey: "Failed to resize HDR/EXR image"]
-                )
-            }
-            resizedImage = scaledImage
-        } else {
-            resizedImage = image
-        }
-
-        // Log the final image size for debugging
-        let finalSize = resizedImage.size
-        NSLog("Final HDR/EXR image size: \(finalSize)")
-
-        // Ensure the scene is initialized
-        guard let scene = scnView.scene else {
-            throw NSError(
-                domain: "Interactive3DPlugin",
-                code: -5,
-                userInfo: [NSLocalizedDescriptionKey: "Scene not initialized"]
-            )
-        }
-
-        // Skip background image if using solid color
-        if useSolidBackground {
-            NSLog("Skipping HDR background — using solid background color")
-            return
-        }
-
-        // Apply the resized image as the scene's background (visible only)
-        scene.background.contents = resizedImage
-
-        // Use a neutral white texture for the lighting environment to avoid color tint
-        scene.lightingEnvironment.contents = UIColor.white
-        scene.lightingEnvironment.intensity = 1.0
-
-        // Remove any existing lights to avoid conflicts
-        scene.rootNode.enumerateChildNodes { (node, _) in
-            if node.light != nil {
-                node.removeFromParentNode()
-                NSLog("Removed existing light node: \(node.name ?? "Unnamed")")
-            }
-        }
-
-        // Add a neutral ambient light
-        let ambientLight = SCNNode()
-        ambientLight.light = SCNLight()
-        ambientLight.light!.type = .ambient
-        ambientLight.light!.color = UIColor.white
-        ambientLight.light!.intensity = 600 // Slightly increased for better illumination
-        scene.rootNode.addChildNode(ambientLight)
-
-        // Add a directional light for consistent model lighting
-        let directionalLight = SCNNode()
-        directionalLight.light = SCNLight()
-        directionalLight.light!.type = .directional
-        directionalLight.light!.color = UIColor.white
-        directionalLight.light!.intensity = 1000
-        directionalLight.position = SCNVector3(x: 10, y: 10, z: 10)
-        directionalLight.look(at: SCNVector3Zero)
-        scene.rootNode.addChildNode(directionalLight)
-
-        NSLog("Successfully loaded HDR/EXR background with size \(finalSize), applied neutral lighting")
-    }
-    
-    private func setPartGroupVisibility(group: [String: Any], isVisible: Bool) {
-        guard let scene = scnView.scene else {
-            NSLog("No scene available to set visibility")
-            return
-        }
-
-        guard let title = group["title"] as? String,
-              let names = group["names"] as? [String] else {
-            NSLog("Invalid group data for title: \(group["title"] ?? "Unknown")")
-            return
-        }
-
-        let opacity: Float = isVisible ? 1.0 : 0.0
-        NSLog("Setting visibility for group '\(title)' to \(isVisible ? "visible" : "invisible") (opacity: \(opacity))")
-
-        var updatedNodes = 0
-        scene.rootNode.enumerateChildNodes { (node, _) in
-            if let nodeName = node.name, names.contains(nodeName) {
-                // Update the named node
-                node.opacity = CGFloat(opacity)
-                node.isHidden = !isVisible // Ensure invisibility
-                self.nodeOpacities[node] = CGFloat(opacity) // Track opacity
-                if node.geometry != nil {
-                    updatedNodes += 1
-                    NSLog("Set opacity to \(opacity) and hidden=\(!isVisible) for geometry node: \(nodeName)")
-                } else {
-                    NSLog("Set opacity to \(opacity) and hidden=\(!isVisible) for non-geometry node: \(nodeName)")
-                }
-                // Update all child geometry nodes
-                node.enumerateChildNodes { (child, _) in
-                    if child.geometry != nil {
-                        child.opacity = CGFloat(opacity)
-                        child.isHidden = !isVisible
-                        self.nodeOpacities[child] = CGFloat(opacity)
-                        updatedNodes += 1
-                        NSLog("Set opacity to \(opacity) and hidden=\(!isVisible) for child geometry node: \(child.name ?? "Unnamed")")
-                    }
-                }
-            }
-        }
-
-        if updatedNodes == 0 {
-            NSLog("No nodes updated for group '\(title)'. Expected names: \(names.joined(separator: ", "))")
-        } else {
-            NSLog("Updated \(updatedNodes) nodes for group '\(title)'")
-        }
-
-        scnView.setNeedsDisplay()
-    }
-    
-    func refreshCacheHighlights() {
-        guard let scene = scnView.scene else { return }
-        // 1. Reset all nodes to original color
-        scene.rootNode.enumerateChildNodes { (node, _) in
-            if let geometryNode = findGeometryNode(in: node) {
-                resetNodeColor(geometryNode)
-            }
-        }
-        // 2. Apply cache color to all cached entities (cache wins)
-        var cachedSet = Set<String>()
-        if enableCache, let cacheMgr = cacheManager {
-            for cachedName in cacheMgr.cachedEntities {
-                cachedSet.insert(cachedName)
-                scene.rootNode.enumerateChildNodes { (node, _) in
-                    if let nodeName = node.name, nodeName == cachedName,
-                       let geometryNode = findGeometryNode(in: node) {
-                        applyCacheHighlight(to: geometryNode, forNodeName: nodeName)
-                    }
-                }
-            }
-        }
-        // 3. Apply selection color ONLY to those NOT in cache
-        for node in selectedNodes {
-            if let name = node.name, !cachedSet.contains(name),
-               let geometryNode = findGeometryNode(in: node) {
-                applyHighlight(to: geometryNode, forNodeName: name)
-            }
-        }
-        // 4. Clear selection IF property is set
-        if clearSelectionsOnHighlight {
-            selectedNodes.removeAll()
-            sendSelectionUpdate()
-        }
-    }
-
-
-
-
-    func removeFromCache(names: [String], clearSelections: Bool = false) {
-        guard let scene = scnView.scene else { return }
-        let cacheMgr = enableCache ? cacheManager : nil
-        for name in names {
-            // Remove from cache if present
-            cacheMgr?.removeFromCache(name)
-            // Unselect if selected
-            if let node = scene.rootNode.childNode(withName: name, recursively: true) {
-                selectedNodes.remove(node)
-                if let geometryNode = findGeometryNode(in: node) {
-                    resetNodeColor(geometryNode)
-                }
-            } else {
-                // If not found directly, fallback to enumerate (rare cases)
-                scene.rootNode.enumerateChildNodes { (node, stop) in
-                    if let nodeName = node.name, nodeName == name {
-                        selectedNodes.remove(node)
-                        if let geometryNode = findGeometryNode(in: node) {
-                            resetNodeColor(geometryNode)
-                        }
-                        stop.pointee = true
-                    }
-                }
+        scnView.scene?.rootNode.enumerateChildNodes { (node, _) in
+            if let nodeName = node.name, names.contains(nodeName),
+               let geometryNode = self.selection.findGeometryNode(in: node) {
+                self.selection.selectedNodes.insert(node)
+                self.selection.applyHighlight(to: geometryNode, forNodeName: nodeName)
             }
         }
         sendSelectionUpdate()
-        sendCacheSelectionUpdate()
+        pendingPreselectedEntities = nil
     }
 
+    // MARK: - Events
 
+    private func sendSelectionUpdate() {
+        guard let eventSink = eventSink else { return }
+        let entities = selection.selectedNodes.map { node in
+            ["id": node.hash, "name": node.name ?? "Unnamed"] as [String: Any]
+        }
+        eventSink(["event": "selectionChanged", "selectedEntities": entities])
+    }
+
+    private func sendCacheSelectionUpdate() {
+        guard let eventSink = eventSink,
+              selection.enableCache,
+              let cacheMgr = selection.cacheManager else { return }
+        let cached = cacheMgr.cachedEntities.map { ["name": $0] }
+        eventSink(["event": "cacheSelectionChanged", "cachedEntities": cached])
+    }
+
+    // MARK: - Cleanup
+
+    deinit {
+        cleanup()
+    }
+
+    func dispose() {
+        cleanup()
+    }
+
+    private func cleanup() {
+        guard !isDisposed else { return }
+        isDisposed = true
+
+        // Break retain cycles
+        methodChannel.setMethodCallHandler(nil)
+        eventChannel.setStreamHandler(nil)
+        eventSink = nil
+
+        // Remove gesture recognizers
+        scnView.gestureRecognizers?.forEach { scnView.removeGestureRecognizer($0) }
+
+        // Stop rendering
+        scnView.isPlaying = false
+        scnView.stop(nil)
+
+        // Clean up managers
+        selection.cleanup()
+        sequenceValidator.reset()
+        sceneManager.cleanup()
+
+        pendingPreselectedEntities = nil
+    }
 }

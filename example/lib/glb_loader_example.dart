@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:interactive_3d/interactive_3d.dart';
-import 'package:interactive_3d/interactive_3d_controller.dart';
 import 'result_page.dart';
 
 final Interactive3dController interactive3dController = Interactive3dController();

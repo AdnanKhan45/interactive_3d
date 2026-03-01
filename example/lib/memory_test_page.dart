@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:interactive_3d/interactive_3d.dart';
-import 'package:interactive_3d/interactive_3d_controller.dart';
 
 /// This page is specifically designed to test memory leaks
 /// by repeatedly navigating back and forth to the 3D viewer

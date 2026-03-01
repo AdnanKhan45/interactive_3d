@@ -1,52 +1,42 @@
 import 'dart:async';
-import 'dart:typed_data';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'interactive_3d_platform_interface.dart';
-import 'interactive_3d.dart';
 
-/// Method channel implementation for Interactive3d plugin.
+import 'models.dart';
+import 'platform_interface.dart';
+
+/// Android method channel implementation using Flutter's Texture API.
 ///
-/// This implementation uses Flutter's Texture widget approach with SurfaceProducer
-/// for high-performance rendering instead of PlatformView.
+/// Communicates with the Kotlin plugin over a single [MethodChannel]
+/// (`interactive_3d_plugin`) and per-texture [EventChannel]s for
+/// selection and cache change events.
 class MethodChannelInteractive3d extends Interactive3dPlatform {
   static const _pluginChannel = MethodChannel('interactive_3d_plugin');
 
-  // Event channels per texture
   final Map<int, EventChannel> _eventChannels = {};
   final Map<int, StreamController<List<EntityData>>> _selectionControllers = {};
   final Map<int, StreamController<List<String>>> _cacheSelectionControllers = {};
 
-  MethodChannelInteractive3d();
-
-  /// Creates a new texture for 3D rendering.
   @override
   Future<Map<String, dynamic>> createTexture({
     required int width,
     required int height,
   }) async {
-    final result = await _pluginChannel.invokeMethod<Map<dynamic, dynamic>>('createTexture', {
-      'width': width,
-      'height': height,
-    });
-
-    if (result == null) {
-      throw Exception('Failed to create texture');
-    }
+    final result = await _pluginChannel.invokeMethod<Map<dynamic, dynamic>>(
+      'createTexture',
+      {'width': width, 'height': height},
+    );
+    if (result == null) throw Exception('Failed to create texture');
 
     final textureId = result['textureId'] as int;
-
-    // Setup event channel for this texture
     _setupEventChannel(textureId);
-
     return {'textureId': textureId};
   }
 
-  /// Disposes a texture and releases all resources.
   @override
   Future<void> disposeTexture(int textureId) async {
-    // Cancel subscriptions and close controllers
     _selectionControllers[textureId]?.close();
     _cacheSelectionControllers[textureId]?.close();
     _selectionControllers.remove(textureId);
@@ -58,11 +48,9 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
     });
   }
 
-  /// Sets up the event channel for a texture.
   void _setupEventChannel(int textureId) {
     final eventChannel = EventChannel('interactive_3d_events_$textureId');
     _eventChannels[textureId] = eventChannel;
-
     _selectionControllers[textureId] = StreamController.broadcast();
     _cacheSelectionControllers[textureId] = StreamController.broadcast();
 
@@ -71,33 +59,30 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
     });
   }
 
-  /// Handles events from the native side.
   void _onEvent(int textureId, dynamic event) {
     final map = event as Map<dynamic, dynamic>;
     final String eventType = map['event'];
 
     if (eventType == 'selectionChanged') {
-      final List<dynamic> selectedEntities = map['selectedEntities'];
-      final entities = selectedEntities.map((e) {
-        return EntityData(id: e['id'] as int, name: e['name'] as String);
-      }).toList();
+      final List<dynamic> selected = map['selectedEntities'];
+      final entities = selected
+          .map((e) => EntityData(id: e['id'] as int, name: e['name'] as String))
+          .toList();
       _selectionControllers[textureId]?.add(entities);
     } else if (eventType == 'cacheSelectionChanged') {
-      final List<dynamic> cachedEntities = map['cachedEntities'];
-      final entityNames = cachedEntities.map<String>((e) => e['name'] as String).toList();
-      _cacheSelectionControllers[textureId]?.add(entityNames);
+      final List<dynamic> cached = map['cachedEntities'];
+      final names = cached.map<String>((e) => e['name'] as String).toList();
+      _cacheSelectionControllers[textureId]?.add(names);
     }
   }
 
   @override
-  Stream<List<EntityData>> selectionStream(int textureId) {
-    return _selectionControllers[textureId]?.stream ?? const Stream.empty();
-  }
+  Stream<List<EntityData>> selectionStream(int textureId) =>
+      _selectionControllers[textureId]?.stream ?? const Stream.empty();
 
   @override
-  Stream<List<String>> cacheSelectionStream(int textureId) {
-    return _cacheSelectionControllers[textureId]?.stream ?? const Stream.empty();
-  }
+  Stream<List<String>> cacheSelectionStream(int textureId) =>
+      _cacheSelectionControllers[textureId]?.stream ?? const Stream.empty();
 
   @override
   Future<void> loadModel({
@@ -112,19 +97,19 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
     List<double>? cacheColor,
     bool clearSelectionsOnHighlight = false,
     List<SequenceConfig>? selectionSequence,
-    final List<double>? backgroundColor
+    List<double>? backgroundColor,
   }) async {
     Uint8List modelBytes;
     String modelName;
 
     if (modelPath != null) {
-      ByteData modelData = await rootBundle.load(modelPath);
-      modelBytes = modelData.buffer.asUint8List();
+      final data = await rootBundle.load(modelPath);
+      modelBytes = data.buffer.asUint8List();
       modelName = modelPath.split('/').last;
     } else if (modelUrl != null) {
       final response = await http.get(Uri.parse(modelUrl));
       if (response.statusCode != 200) {
-        throw Exception('Failed to load model: $modelUrl, status: ${response.statusCode}');
+        throw Exception('Failed to load model: $modelUrl (${response.statusCode})');
       }
       modelBytes = response.bodyBytes;
       modelName = modelUrl.split('/').last;
@@ -136,11 +121,6 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
           (key, value) => MapEntry(key, value.buffer.asUint8List()),
     );
 
-    final patchColorsMap = patchColors?.map((patch) => {
-      'name': patch.name,
-      'color': patch.color,
-    }).toList();
-
     await _pluginChannel.invokeMethod('loadModel', {
       'textureId': textureId,
       'modelBytes': modelBytes,
@@ -148,7 +128,9 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
       'resources': resourceMap,
       'preselectedEntities': preselectedEntities,
       'selectionColor': selectionColor,
-      'patchColors': patchColorsMap,
+      'patchColors': patchColors
+          ?.map((p) => {'name': p.name, 'color': p.color})
+          .toList(),
       'enableCache': enableCache,
       'cacheColor': cacheColor,
       'clearSelectionsOnHighlight': clearSelectionsOnHighlight,
@@ -170,15 +152,10 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
 
     try {
       if (iblPath != null) {
-        ByteData iblData = await rootBundle.load(iblPath);
-        iblBytes = iblData.buffer.asUint8List();
+        iblBytes = (await rootBundle.load(iblPath)).buffer.asUint8List();
       } else if (iblUrl != null) {
         final response = await http.get(Uri.parse(iblUrl));
-        if (response.statusCode == 200) {
-          iblBytes = response.bodyBytes;
-        } else {
-          debugPrint('Failed to load IBL from $iblUrl: ${response.statusCode}');
-        }
+        if (response.statusCode == 200) iblBytes = response.bodyBytes;
       }
     } catch (e) {
       debugPrint('Error loading IBL: $e');
@@ -186,22 +163,17 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
 
     try {
       if (skyboxPath != null) {
-        ByteData skyboxData = await rootBundle.load(skyboxPath);
-        skyboxBytes = skyboxData.buffer.asUint8List();
+        skyboxBytes = (await rootBundle.load(skyboxPath)).buffer.asUint8List();
       } else if (skyboxUrl != null) {
         final response = await http.get(Uri.parse(skyboxUrl));
-        if (response.statusCode == 200) {
-          skyboxBytes = response.bodyBytes;
-        } else {
-          debugPrint('Failed to load skybox from $skyboxUrl: ${response.statusCode}');
-        }
+        if (response.statusCode == 200) skyboxBytes = response.bodyBytes;
       }
     } catch (e) {
       debugPrint('Error loading skybox: $e');
     }
 
     if (iblBytes == null || skyboxBytes == null) {
-      debugPrint('Warning: Environment not fully loaded (iblBytes or skyboxBytes is null)');
+      debugPrint('Warning: Environment not fully loaded');
       return;
     }
 
@@ -220,24 +192,17 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
   }) async {
     Uint8List? backgroundBytes;
 
-    try {
-      if (backgroundPath != null) {
-        ByteData backgroundData = await rootBundle.load(backgroundPath);
-        backgroundBytes = backgroundData.buffer.asUint8List();
-      } else if (backgroundUrl != null) {
-        final response = await http.get(Uri.parse(backgroundUrl));
-        if (response.statusCode == 200) {
-          backgroundBytes = response.bodyBytes;
-        } else {
-          debugPrint('Failed to load HDR/EXR from $backgroundUrl: ${response.statusCode}');
-          throw Exception('Failed to load HDR/EXR background');
-        }
+    if (backgroundPath != null) {
+      backgroundBytes = (await rootBundle.load(backgroundPath)).buffer.asUint8List();
+    } else if (backgroundUrl != null) {
+      final response = await http.get(Uri.parse(backgroundUrl));
+      if (response.statusCode == 200) {
+        backgroundBytes = response.bodyBytes;
       } else {
-        throw ArgumentError('Must provide either backgroundPath or backgroundUrl');
+        throw Exception('Failed to load HDR/EXR from $backgroundUrl');
       }
-    } catch (e) {
-      debugPrint('Error loading HDR/EXR background: $e');
-      throw Exception('Failed to load HDR/EXR background: $e');
+    } else {
+      throw ArgumentError('Must provide backgroundPath or backgroundUrl');
     }
 
     await _pluginChannel.invokeMethod('loadHdrBackground', {
@@ -247,7 +212,10 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
   }
 
   @override
-  Future<void> unselectEntities({required int textureId, List<int>? entityIds}) async {
+  Future<void> unselectEntities({
+    required int textureId,
+    List<int>? entityIds,
+  }) async {
     await _pluginChannel.invokeMethod('unselectEntities', {
       'textureId': textureId,
       'entityIds': entityIds?.map((id) => id.toInt()).toList(),
@@ -260,16 +228,11 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
     required bool isVisible,
     required ModelPartGroup group,
   }) async {
-    try {
-      await _pluginChannel.invokeMethod('setPartGroupVisibility', {
-        'textureId': textureId,
-        'group': group.toMap(),
-        'visibility': {group.title: isVisible},
-      });
-      debugPrint('Set visibility for ${group.title} to $isVisible');
-    } catch (e) {
-      debugPrint('Error setting visibility for ${group.title}: $e');
-    }
+    await _pluginChannel.invokeMethod('setPartGroupVisibility', {
+      'textureId': textureId,
+      'group': group.toMap(),
+      'visibility': {group.title: isVisible},
+    });
   }
 
   @override

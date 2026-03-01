@@ -1,3 +1,10 @@
+## 2.0.1
+
+* 10th release of `interactive_3d` — **Bug Fix & Code Quality Release** 🛠️
+- Fixed selection clear, cache clear, refresh cache, and visibility toggle not working correctly on Android.
+- Fixed cache clear not preserving active selection color on iOS.
+- Codebase reorganized into focused files across all platforms — no API changes.
+
 ## 2.0.0
 
 * 9th release of `interactive_3d` — **Major Release** 🚀

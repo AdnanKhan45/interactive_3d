@@ -5,7 +5,6 @@ import android.util.Log
 import com.google.android.filament.utils.Utils
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.BinaryMessenger
-import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.view.TextureRegistry
@@ -13,22 +12,19 @@ import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Interactive3dPlugin - Flutter plugin for rendering 3D models using Filament.
+ * Flutter plugin entry point for interactive_3d.
  *
- * This implementation uses Flutter's SurfaceProducer API for high-performance
- * texture-based rendering instead of PlatformView, avoiding the performance
- * overhead associated with AndroidView/Hybrid Composition.
+ * Receives method calls from Dart, creates and manages [Interactive3dTextureEntry]
+ * instances per texture ID, and routes all operations to the correct entry.
  */
 class Interactive3dPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
 
-  companion object {
-    private const val TAG = "Interactive3dPlugin"
-    private const val METHOD_CHANNEL = "interactive_3d_plugin"
+  private companion object {
+    const val TAG = "Interactive3dPlugin"
+    const val METHOD_CHANNEL = "interactive_3d_plugin"
 
     init {
-      // Initialize Filament native libraries
       Utils.init()
-      Log.d(TAG, "Filament initialized via Utils.init()")
     }
   }
 
@@ -37,32 +33,22 @@ class Interactive3dPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
   private lateinit var messenger: BinaryMessenger
   private lateinit var context: Context
 
-  // Store active texture entries by their ID
   private val textureEntries = ConcurrentHashMap<Long, Interactive3dTextureEntry>()
 
-  override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
-    Log.d(TAG, "onAttachedToEngine")
-
-    context = flutterPluginBinding.applicationContext
-    messenger = flutterPluginBinding.binaryMessenger
-    textureRegistry = flutterPluginBinding.textureRegistry
+  override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+    context = binding.applicationContext
+    messenger = binding.binaryMessenger
+    textureRegistry = binding.textureRegistry
 
     methodChannel = MethodChannel(messenger, METHOD_CHANNEL)
     methodChannel.setMethodCallHandler(this)
   }
 
   override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
-    Log.d(TAG, "onDetachedFromEngine - cleaning up ${textureEntries.size} texture entries")
-
     methodChannel.setMethodCallHandler(null)
-
-    // Cleanup all texture entries
     textureEntries.values.forEach { entry ->
-      try {
-        entry.dispose()
-      } catch (e: Exception) {
-        Log.e(TAG, "Error disposing texture entry: ${e.message}")
-      }
+      try { entry.dispose() }
+      catch (e: Exception) { Log.e(TAG, "Error disposing entry: ${e.message}") }
     }
     textureEntries.clear()
   }
@@ -77,32 +63,27 @@ class Interactive3dPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
       "setPartGroupVisibility" -> handleSetPartGroupVisibility(call, result)
       "unselectEntities" -> handleUnselectEntities(call, result)
       "clearCache" -> handleClearCache(call, result)
+      "refreshCacheHighlights" -> handleRefreshCacheHighlights(call, result)
+      "removeFromCache" -> handleRemoveFromCache(call, result)
       "onTouchEvent" -> handleTouchEvent(call, result)
       else -> result.notImplemented()
     }
   }
 
-  /**
-   * Creates a new texture entry for 3D rendering.
-   * Returns the texture ID to be used with Flutter's Texture widget.
-   */
+  // -------------------------------------------------------------------------
+  // Texture lifecycle
+  // -------------------------------------------------------------------------
+
   private fun handleCreateTexture(call: MethodCall, result: MethodChannel.Result) {
     val width = call.argument<Int>("width") ?: 800
     val height = call.argument<Int>("height") ?: 600
 
     try {
-      val textureEntry = Interactive3dTextureEntry(
-        context = context,
-        textureRegistry = textureRegistry,
-        messenger = messenger,
-        width = width,
-        height = height
-      )
+      val entry = Interactive3dTextureEntry(context, textureRegistry, messenger, width, height)
+      val textureId = entry.initialize()
 
-      val textureId = textureEntry.initialize()
       if (textureId != -1L) {
-        textureEntries[textureId] = textureEntry
-        Log.d(TAG, "Created texture with ID: $textureId (${width}x${height})")
+        textureEntries[textureId] = entry
         result.success(mapOf("textureId" to textureId))
       } else {
         result.error("TEXTURE_CREATION_FAILED", "Failed to create SurfaceProducer", null)
@@ -113,69 +94,48 @@ class Interactive3dPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     }
   }
 
-  /**
-   * Disposes a texture entry and releases all associated resources.
-   */
   private fun handleDisposeTexture(call: MethodCall, result: MethodChannel.Result) {
     val textureId = call.argument<Number>("textureId")?.toLong()
-    if (textureId == null) {
-      result.error("INVALID_ARGUMENT", "textureId is required", null)
-      return
-    }
+      ?: return result.error("INVALID_ARGUMENT", "textureId required", null)
 
-    val entry = textureEntries.remove(textureId)
-    if (entry != null) {
-      entry.dispose()
-      Log.d(TAG, "Disposed texture with ID: $textureId")
+    textureEntries.remove(textureId)?.let {
+      it.dispose()
       result.success(null)
-    } else {
-      result.error("TEXTURE_NOT_FOUND", "Texture with ID $textureId not found", null)
-    }
+    } ?: result.error("TEXTURE_NOT_FOUND", "Texture $textureId not found", null)
   }
 
-  /**
-   * Loads a 3D model into the specified texture entry.
-   */
+  // -------------------------------------------------------------------------
+  // Model & Environment
+  // -------------------------------------------------------------------------
+
   private fun handleLoadModel(call: MethodCall, result: MethodChannel.Result) {
     val textureId = call.argument<Number>("textureId")?.toLong()
     val modelBytes = call.argument<ByteArray>("modelBytes")
     val modelName = call.argument<String>("name")
-    val resources = call.argument<Map<String, ByteArray>>("resources") ?: emptyMap()
-    val preselectedEntities = call.argument<List<String>?>("preselectedEntities")
-    val selectionColor = call.argument<List<Double>?>("selectionColor")
-    val backgroundColor = call.argument<List<Double>>("backgroundColor")
-    val patchColors = call.argument<List<Map<String, Any>>>("patchColors")
-    val enableCache = call.argument<Boolean>("enableCache") ?: false
-    val cacheColor = call.argument<List<Double>?>("cacheColor")
 
     if (textureId == null || modelBytes == null || modelName == null) {
-      result.error("INVALID_ARGUMENT", "textureId, modelBytes and name are required", null)
-      return
+      return result.error("INVALID_ARGUMENT", "textureId, modelBytes and name required", null)
     }
 
     val entry = textureEntries[textureId]
-    if (entry == null) {
-      result.error("TEXTURE_NOT_FOUND", "Texture with ID $textureId not found", null)
-      return
-    }
+      ?: return result.error("TEXTURE_NOT_FOUND", "Texture $textureId not found", null)
 
     try {
-
-      // Set background color before loading model (so clear color is ready)
+      val backgroundColor = call.argument<List<Double>>("backgroundColor")
       if (backgroundColor != null && backgroundColor.size >= 3) {
         entry.setBackgroundColor(backgroundColor)
       }
 
-
       entry.loadModel(
         buffer = ByteBuffer.wrap(modelBytes),
         fileName = modelName,
-        resources = resources,
-        preselectedEntities = preselectedEntities,
-        selectionColor = selectionColor,
-        patchColors = patchColors,
-        enableCache = enableCache,
-        cacheColor = cacheColor
+        resources = call.argument<Map<String, ByteArray>>("resources") ?: emptyMap(),
+        preselectedEntities = call.argument("preselectedEntities"),
+        selectionColor = call.argument("selectionColor"),
+        patchColors = call.argument("patchColors"),
+        enableCache = call.argument<Boolean>("enableCache") ?: false,
+        cacheColor = call.argument("cacheColor"),
+        clearSelectionsOnHighlight = call.argument<Boolean>("clearSelectionsOnHighlight") ?: false
       )
       result.success(null)
     } catch (e: Exception) {
@@ -184,82 +144,62 @@ class Interactive3dPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     }
   }
 
-  /**
-   * Loads environment lighting (IBL + Skybox) into the specified texture entry.
-   */
   private fun handleLoadEnvironment(call: MethodCall, result: MethodChannel.Result) {
     val textureId = call.argument<Number>("textureId")?.toLong()
+      ?: return result.error("INVALID_ARGUMENT", "textureId required", null)
+
+    val entry = textureEntries[textureId]
+      ?: return result.error("TEXTURE_NOT_FOUND", "Texture $textureId not found", null)
+
     val iblBytes = call.argument<ByteArray>("iblBytes")
     val skyboxBytes = call.argument<ByteArray>("skyboxBytes")
 
-    if (textureId == null) {
-      result.error("INVALID_ARGUMENT", "textureId is required", null)
-      return
-    }
-
-    val entry = textureEntries[textureId]
-    if (entry == null) {
-      result.error("TEXTURE_NOT_FOUND", "Texture with ID $textureId not found", null)
-      return
-    }
-
-    try {
-      if (iblBytes != null && skyboxBytes != null) {
-        entry.loadEnvironment(
-          iblBuffer = ByteBuffer.wrap(iblBytes),
-          skyboxBuffer = ByteBuffer.wrap(skyboxBytes)
-        )
+    if (iblBytes != null && skyboxBytes != null) {
+      try {
+        entry.loadEnvironment(ByteBuffer.wrap(iblBytes), ByteBuffer.wrap(skyboxBytes))
+      } catch (e: Exception) {
+        Log.e(TAG, "Error loading environment: ${e.message}", e)
+        return result.error("ENVIRONMENT_LOAD_FAILED", e.message, null)
       }
-      result.success(null)
-    } catch (e: Exception) {
-      Log.e(TAG, "Error loading environment: ${e.message}", e)
-      result.error("ENVIRONMENT_LOAD_FAILED", e.message, null)
     }
+    result.success(null)
   }
 
-  /**
-   * Sets the camera zoom level.
-   */
+  // -------------------------------------------------------------------------
+  // Camera
+  // -------------------------------------------------------------------------
+
   private fun handleSetZoomLevel(call: MethodCall, result: MethodChannel.Result) {
     val textureId = call.argument<Number>("textureId")?.toLong()
     val zoom = call.argument<Double>("zoom")?.toFloat()
 
-    if (textureId == null || zoom == null) {
-      result.error("INVALID_ARGUMENT", "textureId and zoom are required", null)
-      return
-    }
+    if (textureId == null || zoom == null)
+      return result.error("INVALID_ARGUMENT", "textureId and zoom required", null)
 
     val entry = textureEntries[textureId]
-    if (entry == null) {
-      result.error("TEXTURE_NOT_FOUND", "Texture with ID $textureId not found", null)
-      return
-    }
+      ?: return result.error("TEXTURE_NOT_FOUND", "Texture $textureId not found", null)
 
     entry.setCameraZoomLevel(zoom)
     result.success(null)
   }
 
-  /**
-   * Sets visibility for a group of model parts.
-   */
+  // -------------------------------------------------------------------------
+  // Visibility
+  // -------------------------------------------------------------------------
+
   private fun handleSetPartGroupVisibility(call: MethodCall, result: MethodChannel.Result) {
     val textureId = call.argument<Number>("textureId")?.toLong()
     val group = call.argument<Map<String, Any>>("group")
     val visibility = call.argument<Map<String, Boolean>>("visibility")
 
-    if (textureId == null || group == null || visibility == null) {
-      result.error("INVALID_ARGUMENT", "textureId, group, and visibility are required", null)
-      return
-    }
+    if (textureId == null || group == null || visibility == null)
+      return result.error("INVALID_ARGUMENT", "textureId, group, and visibility required", null)
 
     val entry = textureEntries[textureId]
-    if (entry == null) {
-      result.error("TEXTURE_NOT_FOUND", "Texture with ID $textureId not found", null)
-      return
-    }
+      ?: return result.error("TEXTURE_NOT_FOUND", "Texture $textureId not found", null)
 
     val title = group["title"] as? String
-    val isVisible = visibility[title] as? Boolean
+    val isVisible = visibility[title]
 
     if (title != null && isVisible != null) {
       entry.setPartGroupVisibility(group, isVisible)
@@ -267,87 +207,85 @@ class Interactive3dPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     result.success(null)
   }
 
-  /**
-   * Unselects entities in the 3D model.
-   */
+  // -------------------------------------------------------------------------
+  // Selection & Cache
+  // -------------------------------------------------------------------------
+
   private fun handleUnselectEntities(call: MethodCall, result: MethodChannel.Result) {
     val textureId = call.argument<Number>("textureId")?.toLong()
-    val entityIds = call.argument<List<Long>?>("entityIds")
-
-    if (textureId == null) {
-      result.error("INVALID_ARGUMENT", "textureId is required", null)
-      return
-    }
+      ?: return result.error("INVALID_ARGUMENT", "textureId required", null)
 
     val entry = textureEntries[textureId]
-    if (entry == null) {
-      result.error("TEXTURE_NOT_FOUND", "Texture with ID $textureId not found", null)
-      return
-    }
+      ?: return result.error("TEXTURE_NOT_FOUND", "Texture $textureId not found", null)
 
-    entry.unselectEntities(entityIds)
+    entry.unselectEntities(call.argument("entityIds"))
     result.success(null)
   }
 
-  /**
-   * Clears the selection cache.
-   */
   private fun handleClearCache(call: MethodCall, result: MethodChannel.Result) {
     val textureId = call.argument<Number>("textureId")?.toLong()
-
-    if (textureId == null) {
-      result.error("INVALID_ARGUMENT", "textureId is required", null)
-      return
-    }
+      ?: return result.error("INVALID_ARGUMENT", "textureId required", null)
 
     val entry = textureEntries[textureId]
-    if (entry == null) {
-      result.error("TEXTURE_NOT_FOUND", "Texture with ID $textureId not found", null)
-      return
-    }
+      ?: return result.error("TEXTURE_NOT_FOUND", "Texture $textureId not found", null)
 
     entry.clearCache()
     result.success(null)
   }
 
-  /**
-   * Handles touch events forwarded from Flutter.
-   */
+  private fun handleRefreshCacheHighlights(call: MethodCall, result: MethodChannel.Result) {
+    val textureId = call.argument<Number>("textureId")?.toLong()
+      ?: return result.error("INVALID_ARGUMENT", "textureId required", null)
+
+    val entry = textureEntries[textureId]
+      ?: return result.error("TEXTURE_NOT_FOUND", "Texture $textureId not found", null)
+
+    entry.refreshCacheHighlights()
+    result.success(null)
+  }
+
+  private fun handleRemoveFromCache(call: MethodCall, result: MethodChannel.Result) {
+    val textureId = call.argument<Number>("textureId")?.toLong()
+    val names = call.argument<List<String>>("names")
+
+    if (textureId == null || names == null)
+      return result.error("INVALID_ARGUMENT", "textureId and names required", null)
+
+    val entry = textureEntries[textureId]
+      ?: return result.error("TEXTURE_NOT_FOUND", "Texture $textureId not found", null)
+
+    entry.removeFromCache(names)
+    result.success(null)
+  }
+
+  // -------------------------------------------------------------------------
+  // Touch events
+  // -------------------------------------------------------------------------
+
   private fun handleTouchEvent(call: MethodCall, result: MethodChannel.Result) {
     val textureId = call.argument<Number>("textureId")?.toLong()
     val action = call.argument<String>("action")
-    val x = call.argument<Double>("x")?.toFloat()
-    val y = call.argument<Double>("y")?.toFloat()
-    val deltaX = call.argument<Double>("deltaX")?.toFloat()
-    val deltaY = call.argument<Double>("deltaY")?.toFloat()
-    val scale = call.argument<Double>("scale")?.toFloat()
 
-    if (textureId == null || action == null) {
-      result.error("INVALID_ARGUMENT", "textureId and action are required", null)
-      return
-    }
+    if (textureId == null || action == null)
+      return result.error("INVALID_ARGUMENT", "textureId and action required", null)
 
     val entry = textureEntries[textureId]
-    if (entry == null) {
-      result.error("TEXTURE_NOT_FOUND", "Texture with ID $textureId not found", null)
-      return
-    }
+      ?: return result.error("TEXTURE_NOT_FOUND", "Texture $textureId not found", null)
 
     when (action) {
       "tap" -> {
-        if (x != null && y != null) {
-          entry.onTap(x, y)
-        }
+        val x = call.argument<Double>("x")?.toFloat()
+        val y = call.argument<Double>("y")?.toFloat()
+        if (x != null && y != null) entry.onTap(x, y)
       }
       "pan" -> {
-        if (deltaX != null && deltaY != null) {
-          entry.onPan(deltaX, deltaY)
-        }
+        val dx = call.argument<Double>("deltaX")?.toFloat()
+        val dy = call.argument<Double>("deltaY")?.toFloat()
+        if (dx != null && dy != null) entry.onPan(dx, dy)
       }
       "scale" -> {
-        if (scale != null) {
-          entry.onScale(scale)
-        }
+        val s = call.argument<Double>("scale")?.toFloat()
+        if (s != null) entry.onScale(s)
       }
     }
     result.success(null)
