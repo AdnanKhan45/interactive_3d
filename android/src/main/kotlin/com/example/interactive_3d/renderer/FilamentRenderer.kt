@@ -100,7 +100,7 @@ class FilamentRenderer(
         camera?.let { cam ->
             cameraController.applyProjection(cam, width, height)
             cameraController.applyToCamera(cam)
-            cam.setExposure(16.0f, 1.0f / 125.0f, 75.0f)
+            cam.setExposure(16.0f, 1.0f / 125.0f, 50.0f)
         }
 
         environment.setupDefaultLighting(eng, scene!!)
@@ -110,7 +110,7 @@ class FilamentRenderer(
 
         // Post-processing disabled — color output goes straight to the surface.
         // MSAA still works at hardware level without the post-processing pipeline.
-        filamentView?.isPostProcessingEnabled = false
+        filamentView?.isPostProcessingEnabled = true
         filamentView?.multiSampleAntiAliasingOptions = filamentView!!.multiSampleAntiAliasingOptions.apply {
             enabled = true
             sampleCount = 4

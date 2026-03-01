@@ -278,7 +278,7 @@ class _MemoryTestViewerPageState extends State<MemoryTestViewerPage> {
               onCacheSelectionChanged: (cachedNames) {
                 debugPrint('Cached: $cachedNames');
               },
-              solidBackgroundColor: [0.92, 0.92, 0.92, 1.0],
+              // solidBackgroundColor: [0.92, 0.92, 0.92, 1.0],
               modelPath: 'assets/models/Tooth-3.glb',
               iblPath: 'assets/models/giuseppe_bridge_4k_ibl.ktx',
               skyboxPath: 'assets/models/giuseppe_bridge_4k_skybox.ktx',
