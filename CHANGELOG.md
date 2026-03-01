@@ -1,3 +1,8 @@
+## 2.0.2
+
+* 11th release of `interactive_3d` 
+- Small fixes and optimizations for Android and iOS platforms.
+
 ## 2.0.1
 
 * 10th release of `interactive_3d` — **Bug Fix & Code Quality Release** 🛠️
