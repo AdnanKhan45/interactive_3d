@@ -135,6 +135,7 @@ class Interactive3dState extends State<Interactive3d> {
   Interactive3dPlatform? _platform;
   int? _textureId;
   bool _isInitializing = false;
+  double _renderRatio = 1.0;
 
   // iOS (PlatformView)
   MethodChannel? _iosMethodChannel;
@@ -173,6 +174,11 @@ class Interactive3dState extends State<Interactive3d> {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
 
         if (_textureId == null && !_isInitializing && size.width > 0 && size.height > 0) {
+          final dpr = MediaQuery.of(context).devicePixelRatio;
+          // High-end: near-native quality, Mid: balanced, Low: max performance
+          // The native DeviceCapability tier is detected on init — here we approximate
+          // based on pixel ratio as a proxy (high DPR devices tend to be flagship)
+          _renderRatio = dpr >= 3.0 ? dpr.clamp(1.0, 2.0) : dpr.clamp(1.0, 1.5);
           _initializeTexture(size);
         }
 
@@ -313,8 +319,8 @@ class Interactive3dState extends State<Interactive3d> {
       _platform = MethodChannelInteractive3d();
 
       final result = await _platform!.createTexture(
-        width: size.width.toInt(),
-        height: size.height.toInt(),
+        width: (size.width * _renderRatio).toInt(),
+        height: (size.height * _renderRatio).toInt(),
       );
 
       _textureId = result['textureId'] as int?;
@@ -389,8 +395,8 @@ class Interactive3dState extends State<Interactive3d> {
     _platform!.onTouchEvent(
       textureId: _textureId!,
       action: 'tap',
-      x: details.localPosition.dx,
-      y: details.localPosition.dy,
+      x: details.localPosition.dx * _renderRatio,
+      y: details.localPosition.dy * _renderRatio,
     );
   }
 
@@ -417,8 +423,8 @@ class Interactive3dState extends State<Interactive3d> {
         _platform!.onTouchEvent(
           textureId: _textureId!,
           action: 'pan',
-          deltaX: delta.dx,
-          deltaY: delta.dy,
+          deltaX: delta.dx * _renderRatio,
+          deltaY: delta.dy * _renderRatio,
         );
       }
     }

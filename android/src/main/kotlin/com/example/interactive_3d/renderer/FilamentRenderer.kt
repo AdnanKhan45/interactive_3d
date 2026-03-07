@@ -162,7 +162,8 @@ class FilamentRenderer(
 
         v.temporalAntiAliasingOptions = v.temporalAntiAliasingOptions.apply { enabled = false }
         v.dithering = View.Dithering.TEMPORAL
-        v.blendMode = View.BlendMode.TRANSLUCENT
+        v.blendMode = if (environment.useSolidBackground)
+            View.BlendMode.OPAQUE else View.BlendMode.TRANSLUCENT
 
         v.renderQuality = v.renderQuality.apply {
             hdrColorBuffer = if (deviceTier == DeviceCapability.Tier.HIGH_END)
@@ -180,7 +181,12 @@ class FilamentRenderer(
         val eng = engine ?: return
         destroySwapChain()
 
-        swapChain = eng.createSwapChain(surface, SwapChainFlags.CONFIG_TRANSPARENT)
+        // In createSwapChain, when solid background is used:
+        swapChain = if (environment.useSolidBackground) {
+            eng.createSwapChain(surface)  // No flags = opaque
+        } else {
+            eng.createSwapChain(surface, SwapChainFlags.CONFIG_TRANSPARENT)
+        }
         filamentView?.viewport = Viewport(0, 0, width, height)
         camera?.let {
             cameraController.applyProjection(it, width, height)
@@ -198,9 +204,7 @@ class FilamentRenderer(
         this.width = width
         this.height = height
 
-        val rw = (width * renderScale).toInt()
-        val rh = (height * renderScale).toInt()
-        filamentView?.viewport = Viewport(0, 0, rw, rh)
+        filamentView?.viewport = Viewport(0, 0, width, height)
         camera?.let { cameraController.applyProjection(it, width, height) }
     }
 

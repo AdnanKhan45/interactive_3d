@@ -1,3 +1,10 @@
+## 2.0.3
+
+* 12th release of `interactive_3d`
+- Adaptive render resolution using capped devicePixelRatio for sharper output without Hybrid Composition performance cost.
+- Fixed touch coordinate scaling to match render buffer dimensions.
+- Removed redundant native-side supersampling.
+
 ## 2.0.2
 
 * 11th release of `interactive_3d` 

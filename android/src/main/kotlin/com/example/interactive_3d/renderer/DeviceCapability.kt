@@ -78,13 +78,8 @@ internal object DeviceCapability {
     }
 
     /**
-     * Supersampling multiplier per tier.
+     * Render scale is now handled on the Dart side via devicePixelRatio capping.
+     * Native side always renders 1:1 with the surface dimensions it receives.
      */
-    fun renderScaleFor(tier: Tier): Float {
-        return when (tier) {
-            Tier.HIGH_END -> 1.5f
-            Tier.MID_RANGE -> 1.25f
-            Tier.LOW_END -> 1.1f
-        }
-    }
+    fun renderScaleFor(tier: Tier): Float = 1.0f
 }
