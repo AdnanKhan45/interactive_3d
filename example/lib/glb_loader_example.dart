@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:interactive_3d/interactive_3d.dart';
-import 'package:interactive_3d/interactive_3d_controller.dart';
 import 'result_page.dart';
+
+final Interactive3dController interactive3dController = Interactive3dController();
+
 
 class GlbLoaderExample extends StatefulWidget {
   const GlbLoaderExample({super.key});
@@ -10,13 +12,46 @@ class GlbLoaderExample extends StatefulWidget {
   GlbLoaderExampleState createState() => GlbLoaderExampleState();
 }
 
-// Updated camera zoomLevel: 2.5, position: SCNVector3(x: 0.0, y: 0.0, z: 0.64142126)
-// Updated camera zoomLevel: 2.5, position: SCNVector3(x: 0.0, y: 0.0, z: 0.5)
-
 class GlbLoaderExampleState extends State<GlbLoaderExample> {
   List<EntityData> _selectedEntities = [];
 
-  final Interactive3dController _controller = Interactive3dController();
+  bool _toothVisibiliy = true;
+
+
+  List<String> toothGroup = [
+    "Teeth_Lower_1",
+    "Teeth_Lower_2",
+    "Teeth_Lower_3",
+    "Teeth_Lower_4",
+    "Teeth_Lower_5",
+    "Teeth_Lower_6",
+    "Teeth_Lower_7",
+    "Teeth_Lower_8",
+    "Teeth_Lower_9",
+    "Teeth_Lower_10",
+    "Teeth_Lower_11",
+    "Teeth_Lower_12",
+    "Teeth_Lower_13",
+    "Teeth_Lower_14",
+    "Teeth_Lower_15",
+    "Teeth_Lower_16",
+    "Teeth_Upper_1",
+    "Teeth_Upper_2",
+    "Teeth_Upper_3",
+    "Teeth_Upper_4",
+    "Teeth_Upper_5",
+    "Teeth_Upper_6",
+    "Teeth_Upper_7",
+    "Teeth_Upper_8",
+    "Teeth_Upper_9",
+    "Teeth_Upper_10",
+    "Teeth_Upper_11",
+    "Teeth_Upper_12",
+    "Teeth_Upper_13",
+    "Teeth_Upper_14",
+    "Teeth_Upper_15",
+    "Teeth_Upper_16",
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -28,24 +63,57 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
             children: [
               Expanded(
                   child: Interactive3d(
-                    controller: _controller,
+                controller: interactive3dController,
+                enableCache: true,
+                    clearSelectionOnHighlight: true,
+                cacheColor: [0.7, 0.7, 0.2, 0.5],
+                onCacheSelectionChanged: (cachedNames) {
+                  print('Cached: $cachedNames');
+                },
                 modelPath: 'assets/models/Tooth-3.glb',
                 iblPath: 'assets/models/giuseppe_bridge_4k_ibl.ktx',
                 skyboxPath: 'assets/models/giuseppe_bridge_4k_skybox.ktx',
-                    iOSBackgroundEnvPath: 'assets/models/san_giuseppe_bridge_4k.hdr',
-                preselectedEntities: [
-                  "Teeth_Lower_1",
-                  "Teeth_Lower_2",
-                  "Teeth_Lower_3",
-                  "Neck"
-                ],
+                iOSBackgroundEnvPath:
+                    'assets/models/san_giuseppe_bridge_4k.hdr',
+                // preselectedEntities: [
+                //   "Teeth_Lower_1",
+                //   "Teeth_Lower_2",
+                //   "Teeth_Lower_3",
+                //   "Neck"
+                // ],
                 selectionColor: [0.32, 0.49, 0.55, 1.0], // Light Blue Color
                 defaultZoom: 2,
                 onSelectionChanged: (selectedEntities) {
+                  // Extract only names
+                  print("Selected: ${selectedEntities.map((e) => e.name).toList()}");
                   setState(() {
                     _selectedEntities = selectedEntities;
                   });
                 },
+                    selectionSequence: [
+                      SequenceConfig(
+                        group: 'Teeth_Lower',
+                        order: List.generate(16, (i) => 'Teeth_Lower_${i+1}'),
+                        bidirectional: true,
+                      ),
+                      SequenceConfig(
+                        group: 'Teeth_Upper',
+                        order: List.generate(16, (i) => 'Teeth_Upper_${i+1}'),
+                        bidirectional: true,
+                      ),
+                      // SequenceConfig(
+                      //   group: 'teeth',
+                      //   order: List.generate(32, (i) => 'teeth_${i+1}'),
+                      //   bidirectional: true,
+                      //   tiedGroup: 'gum',
+                      // ),
+                      // SequenceConfig(
+                      //   group: 'gum',
+                      //   order: List.generate(32, (i) => 'gum_${i+1}'),
+                      //   bidirectional: true,
+                      //   tiedGroup: 'teeth',
+                      // ),
+                    ],
                 patchColors: [
                   PatchColor(
                     name: "Hard_Plate_L",
@@ -63,7 +131,6 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
                     name: "Soft_Plate_L",
                     color: [0.41, 0.35, 0.51, 1.0],
                   ),
-
                   PatchColor(
                     name: "Lower_Jaw_L",
                     color: [0.60, 0.43, 0.28, 1.0],
@@ -71,14 +138,15 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
                   PatchColor(
                     name: "Lower_Jaw_R",
                     color: [0.60, 0.43, 0.28, 1.0],
-                  ), PatchColor(
+                  ),
+                  PatchColor(
                     name: "Upper_Jaw_L",
                     color: [0.60, 0.43, 0.28, 1.0],
-                  ), PatchColor(
+                  ),
+                  PatchColor(
                     name: "Upper_Jaw_R",
                     color: [0.60, 0.43, 0.28, 1.0],
                   ),
-
                   PatchColor(
                     name: "Tounge_Lower_L",
                     color: [0.58, 0.50, 0.43, 1.0],
@@ -95,7 +163,6 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
                     name: "Tounge_Upper_R",
                     color: [0.58, 0.50, 0.43, 1.0],
                   ),
-
                   PatchColor(
                     name: "Neck",
                     color: [0.58, 0.50, 0.43, 1.0],
@@ -124,24 +191,100 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
               ),
             ],
           ),
+           Padding(
+             padding: const EdgeInsets.only(top: 40.0),
+             child: Column(
+               children: [
+                 Row(
+                   children: [
+                     Expanded(
+                       child: Padding(
+                         padding:
+                         const EdgeInsets.symmetric(horizontal: 10.0, vertical: 20),
+                         child: ElevatedButton(
+                           onPressed: _clearSelections,
+                           child: Text("Clear"),
+                         ),
+                       ),
+                     ),
+                     Expanded(
+                       child: Padding(
+                         padding:
+                         const EdgeInsets.symmetric(horizontal: 10.0, vertical: 20),
+                         child: ElevatedButton(
+                           onPressed: _clearCache,
+                           child: Text("Clear Cache"),
+                         ),
+                       ),
+                     ),
+                     Expanded(
+                       child: Padding(
+                         padding:
+                         const EdgeInsets.symmetric(horizontal: 10.0, vertical: 20),
+                         child: ElevatedButton(
+                           onPressed: _refreshCacheHighlight,
+                           child: Text("Refresh Cache"),
+                         ),
+                       ),
+                     ),
+                   ],
+                 ),
+                 Row(
+                   children: [
+                     Expanded(
+                       child: Padding(
+                         padding:
+                         const EdgeInsets.symmetric(horizontal: 10.0, vertical: 20),
+                         child: ElevatedButton(
+                           onPressed: _clearSpecificCache,
+                           child: Text("Clear Specific"),
+                         ),
+                       ),
+                     ),
+                   ],
+                 )
+               ],
+             ),
+           ),
+          Align(
+            alignment: Alignment.topLeft,
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20.0, vertical: 20),
+              child: Switch(
+                value: _toothVisibiliy,
+                onChanged: (visibility) {
+                  setState(
+                    () {
 
-          if (_selectedEntities.isNotEmpty)
-            Align(
-              alignment: Alignment.topCenter,
-              child: Padding(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 20.0, vertical: 20),
-                child: ElevatedButton(onPressed: _clearSelections, child: Text("Clear"),),
+                      _toothVisibiliy = visibility;
+
+                      interactive3dController.updatePartGroupConfig(
+                          isVisible: _toothVisibiliy,
+                          group: ModelPartGroup(
+                              title: "Teeth", names: toothGroup));
+                    },
+                  );
+                },
               ),
             ),
+          )
         ],
       ),
     );
   }
 
+  void _clearSpecificCache() async {
+    try {
+      await interactive3dController.removeFromCache(["Teeth_Lower_1", "Neck"]);
+    } catch (e) {
+      print('Error clearing specific cache: $e');
+    }
+  }
+
   void _clearSelections() async {
     try {
-      await _controller.clearSelections();
+      await interactive3dController.clearSelections();
       setState(() {
         _selectedEntities.clear();
       });
@@ -150,10 +293,26 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
     }
   }
 
+  void _clearCache() async {
+    try {
+      await interactive3dController.clearCache();
+    } catch (e) {
+      print('Error clearing selections: $e');
+    }
+  }
+
+  void _refreshCacheHighlight() async {
+    try {
+      await interactive3dController.refreshCacheHighlights();
+    } catch (e) {
+      print('Error clearing selections: $e');
+    }
+  }
+
   // TO REMOVE SPECIFIC ENTITY SELECTION
   void _removeEntity(int entityId) async {
     try {
-      await _controller.unselectEntities(entityIds: [entityId]);
+      await interactive3dController.unselectEntities(entityIds: [entityId]);
       setState(() {
         _selectedEntities.removeWhere((entity) => entity.id == entityId);
       });

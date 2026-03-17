@@ -26,11 +26,11 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/interactive_3d/ios"
 
 SPEC CHECKSUMS:
-  Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   GLTFSceneKit: d1b437c514ba2aed5555afb0fddd64e030612d57
   integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
   interactive_3d: da2ced80518ad9dc4f2ccc07607fdc94ab868f0e
 
-PODFILE CHECKSUM: 984ae68da4551b355f9df642e1bf4b67d85f5215
+PODFILE CHECKSUM: 61b16b86ee81b0e9b149bcf939feb7d9cf439fd4
 
 COCOAPODS: 1.16.2
