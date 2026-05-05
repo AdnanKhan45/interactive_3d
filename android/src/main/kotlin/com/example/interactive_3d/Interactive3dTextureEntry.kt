@@ -99,6 +99,7 @@ class Interactive3dTextureEntry(
             filamentRenderer = FilamentRenderer(context, currentWidth, currentHeight)
             filamentRenderer?.setSelectionListener { sendSelectionEvent(it) }
             filamentRenderer?.setCacheSelectionListener { sendCacheSelectionEvent(it) }
+            filamentRenderer?.setSelectionRejectedListener { sendSelectionRejectedEvent(it) }
         }
 
         filamentRenderer?.createSwapChain(producer.getSurface())
@@ -119,13 +120,14 @@ class Interactive3dTextureEntry(
         buffer: ByteBuffer, fileName: String, resources: Map<String, ByteArray>,
         preselectedEntities: List<String>?, selectionColor: List<Double>?,
         patchColors: List<Map<String, Any>>?, enableCache: Boolean, cacheColor: List<Double>?,
-        clearSelectionsOnHighlight: Boolean = false
+        clearSelectionsOnHighlight: Boolean = false,
+        selectionSequence: List<Map<String, Any>>? = null
     ) {
         val op = {
             filamentRenderer?.loadModel(
                 buffer, fileName, resources, preselectedEntities,
                 selectionColor, patchColors, enableCache, cacheColor,
-                clearSelectionsOnHighlight
+                clearSelectionsOnHighlight, selectionSequence
             )
         }
         if (filamentRenderer != null && surfaceProducer?.getSurface()?.isValid == true) {
@@ -186,6 +188,12 @@ class Interactive3dTextureEntry(
     private fun sendCacheSelectionEvent(entities: List<Map<String, Any>>) {
         mainHandler.post {
             eventSink?.success(mapOf("event" to "cacheSelectionChanged", "cachedEntities" to entities))
+        }
+    }
+
+    private fun sendSelectionRejectedEvent(name: String) {
+        mainHandler.post {
+            eventSink?.success(mapOf("event" to "selectionRejected", "name" to name))
         }
     }
 

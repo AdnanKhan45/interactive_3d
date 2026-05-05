@@ -135,7 +135,8 @@ class Interactive3dPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         patchColors = call.argument("patchColors"),
         enableCache = call.argument<Boolean>("enableCache") ?: false,
         cacheColor = call.argument("cacheColor"),
-        clearSelectionsOnHighlight = call.argument<Boolean>("clearSelectionsOnHighlight") ?: false
+        clearSelectionsOnHighlight = call.argument<Boolean>("clearSelectionsOnHighlight") ?: false,
+        selectionSequence = call.argument("selectionSequence")
       )
       result.success(null)
     } catch (e: Exception) {

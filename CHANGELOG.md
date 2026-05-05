@@ -1,3 +1,9 @@
+## 2.0.4
+
+* 13th release of `interactive_3d`
+- Added `selectionSequence` enforcement on Android, matching the existing iOS behavior — taps that violate the configured order are rejected and emit a `selectionRejected` event.
+
+
 ## 2.0.3
 
 * 12th release of `interactive_3d`
