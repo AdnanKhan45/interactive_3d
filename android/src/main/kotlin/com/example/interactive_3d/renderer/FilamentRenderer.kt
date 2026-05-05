@@ -56,6 +56,10 @@ class FilamentRenderer(
     internal val environment = EnvironmentLoader()
     internal val modelLoader = ModelLoader()
     internal val selection = SelectionManager()
+    internal val sequenceValidator = SequenceValidator()
+
+    // Notified when a tap is rejected by sequence validation
+    private var onSelectionRejected: ((String) -> Unit)? = null
 
     // Device-adaptive settings
     private val deviceTier: DeviceCapability.Tier
@@ -245,7 +249,8 @@ class FilamentRenderer(
         patchColors: List<Map<String, Any>>?,
         enableCache: Boolean,
         cacheColor: List<Double>?,
-        clearSelectionsOnHighlight: Boolean = false
+        clearSelectionsOnHighlight: Boolean = false,
+        selectionSequence: List<Map<String, Any>>? = null
     ) {
         val eng = engine ?: return
         val scn = scene ?: return
@@ -262,6 +267,13 @@ class FilamentRenderer(
         selection.patchColors = patchColors
         selection.enableCache = enableCache
         selection.clearSelectionsOnHighlight = clearSelectionsOnHighlight
+
+        // Configure sequence validation (active whenever the list is non-empty)
+        if (selectionSequence != null) {
+            sequenceValidator.configure(selectionSequence)
+        } else {
+            sequenceValidator.reset()
+        }
 
         if (enableCache) {
             selection.cacheColor = cacheColor.toFloatArrayOrDefault(floatArrayOf(0.8f, 0.8f, 0.2f, 0.6f))
@@ -336,6 +348,19 @@ class FilamentRenderer(
             if (!isModelEntity) return@pick
 
             val eng = engine ?: return@pick
+
+            // Sequence validation — mirror iOS Interactive3dView.handleTap
+            val nodeName = asset.getName(entity)
+            if (nodeName != null) {
+                val selectedNames = selection.selectedEntities
+                    .mapNotNull { asset.getName(it) }
+                    .toSet()
+                if (!sequenceValidator.isTapAllowed(nodeName, selectedNames)) {
+                    onSelectionRejected?.invoke(nodeName)
+                    return@pick
+                }
+            }
+
             selection.handleTap(entity, asset, eng)
         }
     }
@@ -463,6 +488,10 @@ class FilamentRenderer(
         selection.onCacheSelectionChanged = listener
     }
 
+    fun setSelectionRejectedListener(listener: (String) -> Unit) {
+        onSelectionRejected = listener
+    }
+
     // -------------------------------------------------------------------------
     // Cleanup
     // -------------------------------------------------------------------------
@@ -473,6 +502,7 @@ class FilamentRenderer(
         val eng = engine ?: return
 
         selection.cleanup(eng)
+        sequenceValidator.reset()
         cameraController.cancelCallbacks()
         ioScope.cancel()
 
