@@ -30,6 +30,8 @@
 
 ✅ Runtime PBR material overrides. Apply color, metallic, roughness, and emissive per entity at runtime, independent of selection.
 
+✅ Runtime base color textures. Upload a PNG or JPEG onto any entity at runtime from bytes, no GLB rebuild.
+
 ✅ Device-adaptive quality on Android — MSAA, supersampling, and render quality auto-tuning.
 
 ✅ Adaptive frame pacing — saves battery when model is idle.
@@ -221,6 +223,33 @@ Interactive3d(
 Successive calls on the same entity merge. Pass only the fields you want to change, the rest keep their value. Selection still wins visually while active, and deselecting restores the override.
 
 Overrides are not persisted by the plugin. Store them in your own state layer (SharedPreferences, Hive, SQLite, or a remote DB) and pass them back via `initialMaterialOverrides` when you build the widget.
+
+## Runtime Base Color Textures (v2.2.0)
+
+Upload a PNG or JPEG onto any entity at runtime as its base color texture, without rebuilding the GLB. Pass the encoded bytes; the plugin decodes them natively. An active color override tints the uploaded texture, the same way it tints a GLB texture.
+
+```dart
+import 'package:flutter/services.dart' show rootBundle;
+
+final bytes = (await rootBundle.load('assets/textures/wood.png')).buffer.asUint8List();
+
+// Apply at runtime (e.g. from a swatch tap):
+await controller.setEntityTexture(name: 'Tooth_7', bytes: bytes);
+
+// Remove the texture, keeping any color/metallic/roughness override:
+await controller.resetEntityTexture('Tooth_7');
+
+// Or remove every uploaded texture at once:
+await controller.resetAllEntityTextures();
+```
+
+The texture merges into the same per-entity override as color and PBR factors: setting a color after a texture keeps the texture, and the reverse holds too. Selection still wins visually while active, and the texture returns on deselect. `resetEntityMaterial` clears everything on the entity, including the texture.
+
+Two things to know:
+- The entity's mesh must have UV coordinates. A part authored without UVs has nowhere to map the image.
+- Base color images are treated as sRGB, and images larger than 2048px on the longest side are downsampled to bound GPU memory.
+
+Like overrides, textures are not persisted by the plugin. Re-apply them from your own state layer after the model loads.
 
 ## Must read
 
