@@ -228,6 +228,12 @@ Overrides are not persisted by the plugin. Store them in your own state layer (S
 
 Upload a PNG or JPEG onto any entity at runtime as its base color texture, without rebuilding the GLB. Pass the encoded bytes; the plugin decodes them natively. An active color override tints the uploaded texture, the same way it tints a GLB texture.
 
+<p align="center">
+  <img src="assets/texture_android.png" width="250" alt="Runtime texture on Android (Filament)" />
+  <img src="assets/texture_ios.png" width="250" alt="Runtime texture on iOS (SceneKit)" />
+</p>
+<p align="center"><em>A photo applied to teeth at runtime. Android (left) and iOS (right).</em></p>
+
 ```dart
 import 'package:flutter/services.dart' show rootBundle;
 
