@@ -31,6 +31,3 @@ migrate_working_dir/
 .flutter-plugins
 .flutter-plugins-dependencies
 build/
-
-# Claude session memory — local-only context for the assistant, never commit
-claude.local.md

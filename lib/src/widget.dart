@@ -99,6 +99,9 @@ class Interactive3d extends StatefulWidget {
   /// visually; deselect restores the override.
   final List<MaterialOverride>? initialMaterialOverrides;
 
+  /// Base color textures to apply once when the model first loads.
+  final List<EntityTexture>? initialEntityTextures;
+
   const Interactive3d({
     super.key,
     this.modelPath,
@@ -125,6 +128,7 @@ class Interactive3d extends StatefulWidget {
     this.backgroundColor = Colors.black,
     this.loadingWidget,
     this.initialMaterialOverrides,
+    this.initialEntityTextures,
   });
 
   @override
@@ -281,6 +285,8 @@ class Interactive3dState extends State<Interactive3d> {
         'backgroundColor': widget.solidBackgroundColor,
         'initialMaterialOverrides':
             widget.initialMaterialOverrides?.map((o) => o.toMap()).toList(),
+        'initialEntityTextures':
+            widget.initialEntityTextures?.map((t) => t.toMap()).toList(),
       });
 
       // iOS HDR/EXR background
@@ -375,6 +381,7 @@ class Interactive3dState extends State<Interactive3d> {
       selectionSequence: widget.selectionSequence,
       backgroundColor: widget.solidBackgroundColor,
       initialMaterialOverrides: widget.initialMaterialOverrides,
+      initialEntityTextures: widget.initialEntityTextures,
     );
 
     await _platform!.loadEnvironment(
@@ -529,6 +536,33 @@ class Interactive3dState extends State<Interactive3d> {
     } else {
       if (_platform == null || _textureId == null) return;
       await _platform!.resetEntityMaterials(
+        textureId: _textureId!,
+        names: names,
+      );
+    }
+  }
+
+  Future<void> setEntityTextures(List<EntityTexture> textures) async {
+    if (textures.isEmpty) return;
+    final payload = textures.map((t) => t.toMap()).toList();
+    if (Platform.isIOS) {
+      await _iosMethodChannel?.invokeMethod('setEntityTextures', payload);
+    } else {
+      if (_platform == null || _textureId == null) return;
+      await _platform!.setEntityTextures(
+        textureId: _textureId!,
+        textures: textures,
+      );
+    }
+  }
+
+  /// Null [names] resets every active texture.
+  Future<void> resetEntityTextures(List<String>? names) async {
+    if (Platform.isIOS) {
+      await _iosMethodChannel?.invokeMethod('resetEntityTextures', names);
+    } else {
+      if (_platform == null || _textureId == null) return;
+      await _platform!.resetEntityTextures(
         textureId: _textureId!,
         names: names,
       );

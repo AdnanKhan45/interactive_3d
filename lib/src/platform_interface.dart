@@ -43,6 +43,7 @@ abstract class Interactive3dPlatform extends PlatformInterface {
     List<SequenceConfig>? selectionSequence,
     List<double>? backgroundColor,
     List<MaterialOverride>? initialMaterialOverrides,
+    List<EntityTexture>? initialEntityTextures,
   });
 
   /// Loads IBL and skybox environment lighting.
@@ -94,6 +95,18 @@ abstract class Interactive3dPlatform extends PlatformInterface {
 
   /// Removes overrides for [names], or all when [names] is null.
   Future<void> resetEntityMaterials({
+    required int textureId,
+    List<String>? names,
+  });
+
+  /// Applies one or more runtime base-color textures. Each merges into per-entity state.
+  Future<void> setEntityTextures({
+    required int textureId,
+    required List<EntityTexture> textures,
+  });
+
+  /// Removes runtime textures for [names], or all when [names] is null.
+  Future<void> resetEntityTextures({
     required int textureId,
     List<String>? names,
   });

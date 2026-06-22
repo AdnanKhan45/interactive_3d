@@ -4,6 +4,8 @@
 /// the widget, controller, and platform channel layers.
 library;
 
+import 'dart:typed_data';
+
 /// Configuration for ordered entity selection within a named group.
 ///
 /// When [selectionSequence] is provided to [Interactive3d], taps are
@@ -108,5 +110,24 @@ class MaterialOverride {
         if (metallic != null) 'metallic': metallic,
         if (roughness != null) 'roughness': roughness,
         if (emissive != null) 'emissive': emissive,
+      };
+}
+
+/// A runtime base-color texture applied to one entity, independent of selection.
+/// Merges into the entity's override state: a later color or PBR-factor call
+/// keeps the texture, and an existing color tints it. Selection wins visually
+/// while active; deselect restores the texture.
+class EntityTexture {
+  /// Entity node name in the glTF/GLB.
+  final String name;
+
+  /// Encoded PNG or JPEG bytes, decoded on the platform side.
+  final Uint8List bytes;
+
+  EntityTexture({required this.name, required this.bytes});
+
+  Map<String, dynamic> toMap() => {
+        'name': name,
+        'texture': bytes,
       };
 }

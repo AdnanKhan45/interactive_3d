@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'widget.dart';
 import 'models.dart';
 
@@ -123,5 +125,33 @@ class Interactive3dController {
   Future<void> resetAllMaterialOverrides() async {
     _ensureAttached();
     await _state!.resetEntityMaterials(null);
+  }
+
+  /// Applies a runtime base-color texture to [name] from PNG/JPEG [bytes].
+  /// Merges into the entity's override state; an existing color tints it.
+  Future<void> setEntityTexture({
+    required String name,
+    required Uint8List bytes,
+  }) async {
+    _ensureAttached();
+    await _state!.setEntityTextures([EntityTexture(name: name, bytes: bytes)]);
+  }
+
+  /// Applies runtime base-color textures to many entities in one call.
+  Future<void> setEntityTextures(List<EntityTexture> textures) async {
+    _ensureAttached();
+    await _state!.setEntityTextures(textures);
+  }
+
+  /// Removes the runtime texture on [name], keeping any other active overrides.
+  Future<void> resetEntityTexture(String name) async {
+    _ensureAttached();
+    await _state!.resetEntityTextures([name]);
+  }
+
+  /// Removes all runtime textures, keeping any non-texture overrides.
+  Future<void> resetAllEntityTextures() async {
+    _ensureAttached();
+    await _state!.resetEntityTextures(null);
   }
 }

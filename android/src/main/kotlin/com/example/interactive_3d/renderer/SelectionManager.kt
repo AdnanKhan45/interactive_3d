@@ -1,10 +1,17 @@
 package com.example.interactive_3d.renderer
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.util.Log
 import com.google.android.filament.Engine
 import com.google.android.filament.MaterialInstance
+import com.google.android.filament.Texture
+import com.google.android.filament.TextureSampler
+import com.google.android.filament.android.TextureHelper
 import com.google.android.filament.gltfio.FilamentAsset
 import com.example.interactive_3d.Interactive3dCacheManager
+import kotlin.math.floor
+import kotlin.math.log2
 
 /**
  * Handles entity selection, highlighting, and cache coloring.
@@ -20,6 +27,7 @@ internal class SelectionManager {
 
     private companion object {
         const val TAG = "SelectionManager"
+        const val MAX_TEXTURE_DIM = 2048
     }
 
     // Currently selected entity IDs
@@ -51,6 +59,10 @@ internal class SelectionManager {
     private val overrideParams = mutableMapOf<Int, MutableMap<String, Any>>()
     private val overrideMaterials = mutableMapOf<Int, MutableMap<Int, MaterialInstance>>()
     private val entitiesWithOverrideApplied = mutableSetOf<Int>()
+
+    // Per-entity uploaded base color textures. GPU resources with manual lifecycle,
+    // destroyed wherever overrideMaterials is.
+    private val overrideTextures = mutableMapOf<Int, Texture>()
 
     // Part visibility tracking
     val entityVisibilities = mutableMapOf<Int, Boolean>()
@@ -223,7 +235,10 @@ internal class SelectionManager {
             for (i in 0 until count) {
                 try {
                     val orig = originalMaterials[entity]?.get(i) ?: continue
-                    newMap[i] = orig.material.createInstance()
+                    // Duplicate copies the original's PBR maps and factors, so an
+                    // override changes only what it sets. createInstance would start
+                    // from material defaults and render as a metallic mirror.
+                    newMap[i] = MaterialInstance.duplicate(orig, "override")
                 } catch (e: Exception) {
                     Log.w(TAG, "Could not create override instance: ${e.message}")
                 }
@@ -231,8 +246,11 @@ internal class SelectionManager {
             newMap
         }
 
-        // Apply every accumulated param to each override instance.
-        for ((_, mat) in mats) applyOverrideParamsToInstance(mat, merged)
+        // Apply every accumulated param, then bind the uploaded texture if present.
+        for ((_, mat) in mats) {
+            applyOverrideParamsToInstance(mat, merged)
+            overrideTextures[entity]?.let { bindBaseColorTexture(mat, it) }
+        }
 
         // Selection wins visually; only stash the deselect target.
         if (entity in entitiesWithSelectionColor) return
@@ -251,6 +269,10 @@ internal class SelectionManager {
         overrideMaterials.remove(entity)?.values?.forEach { mat ->
             try { engine.destroyMaterialInstance(mat) }
             catch (e: Exception) { Log.w(TAG, "Failed to destroy override instance: ${e.message}") }
+        }
+        overrideTextures.remove(entity)?.let { tex ->
+            try { engine.destroyTexture(tex) }
+            catch (e: Exception) { Log.w(TAG, "Failed to destroy override texture: ${e.message}") }
         }
         overrideParams.remove(entity)
 
@@ -316,6 +338,135 @@ internal class SelectionManager {
                 }
             }
         }
+    }
+
+    /** Looks up entities by name and uploads a base color texture to each. */
+    fun applyTexturesByName(
+        textures: List<Map<String, Any>>,
+        asset: FilamentAsset,
+        engine: Engine,
+    ) {
+        if (textures.isEmpty()) return
+        for (entry in textures) {
+            val name = entry["name"] as? String ?: continue
+            val bytes = entry["texture"] as? ByteArray ?: continue
+            asset.entities?.forEach { entity ->
+                if (asset.getName(entity) == name) {
+                    applyEntityTexture(entity, bytes, engine)
+                }
+            }
+        }
+    }
+
+    /** Resets textures for entities matched by [names], or all when null. */
+    fun resetTexturesByName(
+        names: List<String>?,
+        asset: FilamentAsset,
+        engine: Engine,
+    ) {
+        if (names == null) {
+            for (entity in overrideTextures.keys.toList()) {
+                resetEntityTexture(entity, engine)
+            }
+            return
+        }
+        for (name in names) {
+            asset.entities?.forEach { entity ->
+                if (asset.getName(entity) == name) {
+                    resetEntityTexture(entity, engine)
+                }
+            }
+        }
+    }
+
+    /**
+     * Decodes [bytes] into an sRGB texture and binds it as [entity]'s base
+     * color map, merged onto any existing override. Rebinds the reused
+     * instances to the new texture before freeing the old one.
+     */
+    fun applyEntityTexture(entity: Int, bytes: ByteArray, engine: Engine) {
+        if (!engine.renderableManager.hasComponent(entity)) return
+        val texture = decodeSrgbTexture(bytes, engine)
+        if (texture == null) {
+            Log.w(TAG, "Could not decode texture for entity $entity")
+            return
+        }
+        val old = overrideTextures.put(entity, texture)
+        applyMaterialOverride(entity, emptyMap(), engine)
+        if (old != null) {
+            try { engine.destroyTexture(old) }
+            catch (e: Exception) { Log.w(TAG, "Failed to destroy old texture: ${e.message}") }
+        }
+    }
+
+    /**
+     * Removes the uploaded texture on [entity], keeping any color/PBR override.
+     * Rebuilds the override instances so the GLB base color reappears; falls
+     * back to a full override reset when nothing else remains.
+     */
+    fun resetEntityTexture(entity: Int, engine: Engine) {
+        if (!overrideTextures.containsKey(entity)) return
+        if (overrideParams[entity].isNullOrEmpty()) {
+            resetMaterialOverride(entity, engine)
+            return
+        }
+        val tex = overrideTextures.remove(entity)
+        overrideMaterials.remove(entity)?.values?.forEach { mat ->
+            try { engine.destroyMaterialInstance(mat) }
+            catch (e: Exception) { Log.w(TAG, "Failed to destroy override instance: ${e.message}") }
+        }
+        applyMaterialOverride(entity, emptyMap(), engine)
+        tex?.let {
+            try { engine.destroyTexture(it) }
+            catch (e: Exception) { Log.w(TAG, "Failed to destroy texture: ${e.message}") }
+        }
+    }
+
+    private fun decodeSrgbTexture(bytes: ByteArray, engine: Engine): Texture? {
+        var bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return null
+        val maxDim = maxOf(bitmap.width, bitmap.height)
+        if (maxDim > MAX_TEXTURE_DIM) {
+            val scale = MAX_TEXTURE_DIM.toFloat() / maxDim
+            val w = (bitmap.width * scale).toInt().coerceAtLeast(1)
+            val h = (bitmap.height * scale).toInt().coerceAtLeast(1)
+            Log.w(TAG, "Texture ${bitmap.width}x${bitmap.height} exceeds ${MAX_TEXTURE_DIM}px, downsampling to ${w}x${h}")
+            val scaled = Bitmap.createScaledBitmap(bitmap, w, h, true)
+            if (scaled !== bitmap) bitmap.recycle()
+            bitmap = scaled
+        }
+        val levels = (floor(log2(maxOf(bitmap.width, bitmap.height).toDouble())).toInt() + 1)
+            .coerceAtLeast(1)
+        val texture = Texture.Builder()
+            .width(bitmap.width)
+            .height(bitmap.height)
+            .levels(levels)
+            .format(Texture.InternalFormat.SRGB8_A8)
+            .sampler(Texture.Sampler.SAMPLER_2D)
+            // GEN_MIPMAPPABLE is required by generateMipmaps; DEFAULT omits it.
+            .usage(Texture.Usage.DEFAULT or Texture.Usage.GEN_MIPMAPPABLE)
+            .build(engine)
+        try {
+            TextureHelper.setBitmap(engine, texture, 0, bitmap)
+            texture.generateMipmaps(engine)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to upload texture: ${e.message}")
+            engine.destroyTexture(texture)
+            bitmap.recycle()
+            return null
+        }
+        bitmap.recycle()
+        return texture
+    }
+
+    private fun bindBaseColorTexture(mat: MaterialInstance, texture: Texture) {
+        val sampler = TextureSampler(
+            TextureSampler.MinFilter.LINEAR_MIPMAP_LINEAR,
+            TextureSampler.MagFilter.LINEAR,
+            TextureSampler.WrapMode.REPEAT,
+        )
+        mat.setParameter("baseColorMap", texture, sampler)
+        // Force sampling for entities whose GLB material had no base color map.
+        mat.setParameter("baseColorIndex", 0)
     }
 
     private fun applyOverrideParamsToInstance(mat: MaterialInstance, params: Map<String, Any>) {
@@ -559,6 +710,7 @@ internal class SelectionManager {
         entityVisibilities.clear()
         destroyCreatedInstances(engine)
         destroyOverrideInstances(engine)
+        destroyOverrideTextures(engine)
         originalMaterials.clear()
         entitiesWithSelectionColor.clear()
         entitiesWithCacheColor.clear()
@@ -574,6 +726,14 @@ internal class SelectionManager {
             }
         }
         overrideMaterials.clear()
+    }
+
+    private fun destroyOverrideTextures(engine: Engine) {
+        overrideTextures.values.forEach { tex ->
+            try { engine.destroyTexture(tex) }
+            catch (e: Exception) { Log.w(TAG, "Failed to destroy override texture: ${e.message}") }
+        }
+        overrideTextures.clear()
     }
 
     /**

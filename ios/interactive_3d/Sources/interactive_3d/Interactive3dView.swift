@@ -23,6 +23,7 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
     // State
     private var pendingPreselectedEntities: [String]?
     private var pendingInitialOverrides: [[String: Any]]?
+    private var pendingInitialTextures: [[String: Any]]?
     private var isDisposed = false
 
     init(frame: CGRect, viewId: Int64, messenger: FlutterBinaryMessenger, args: Any?) {
@@ -102,6 +103,10 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             handleSetEntityMaterials(call, result: result)
         case "resetEntityMaterials":
             handleResetEntityMaterials(call, result: result)
+        case "setEntityTextures":
+            handleSetEntityTextures(call, result: result)
+        case "resetEntityTextures":
+            handleResetEntityTextures(call, result: result)
         case "dispose":
             DispatchQueue.main.async { [weak self] in
                 self?.dispose()
@@ -127,6 +132,7 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
         selection.clearSelectionsOnHighlight = (args["clearSelectionsOnHighlight"] as? Bool) ?? false
         pendingPreselectedEntities = args["preselectedEntities"] as? [String]
         pendingInitialOverrides = args["initialMaterialOverrides"] as? [[String: Any]]
+        pendingInitialTextures = args["initialEntityTextures"] as? [[String: Any]]
 
         // Configure sequence
         if let seqArray = args["selectionSequence"] as? [[String: Any]] {
@@ -180,6 +186,7 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
                 // Apply initial overrides before cache/preselections so override
                 // is the deselect target underneath any selection layered above.
                 self.applyInitialOverrides()
+                self.applyInitialTextures()
 
                 // Apply cache highlights (skips overridden entities internally).
                 if let scene = self.scnView.scene {
@@ -370,6 +377,12 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
         pendingInitialOverrides = nil
     }
 
+    private func applyInitialTextures() {
+        guard let entries = pendingInitialTextures, !entries.isEmpty else { return }
+        applyTextureEntries(entries)
+        pendingInitialTextures = nil
+    }
+
     private func applyOverrideEntries(_ entries: [[String: Any]]) {
         guard let scene = scnView.scene else { return }
         for entry in entries {
@@ -419,6 +432,57 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
         let names = call.arguments as? [String]
         DispatchQueue.main.async { [weak self] in
             self?.resetOverrideEntries(names)
+            result(nil)
+        }
+    }
+
+    private func applyTextureEntries(_ entries: [[String: Any]]) {
+        guard let scene = scnView.scene else { return }
+        for entry in entries {
+            guard let name = entry["name"] as? String,
+                  let data = (entry["texture"] as? FlutterStandardTypedData)?.data else { continue }
+            scene.rootNode.enumerateChildNodes { (node, _) in
+                if node.name == name,
+                   let geometryNode = self.selection.findGeometryNode(in: node) {
+                    self.selection.applyEntityTexture(to: geometryNode, data: data)
+                }
+            }
+        }
+    }
+
+    private func resetTextureEntries(_ names: [String]?) {
+        guard let scene = scnView.scene else { return }
+        if let names = names {
+            for name in names {
+                scene.rootNode.enumerateChildNodes { (node, _) in
+                    if node.name == name,
+                       let geometryNode = self.selection.findGeometryNode(in: node) {
+                        self.selection.resetEntityTexture(geometryNode)
+                    }
+                }
+            }
+        } else {
+            for node in Array(selection.overrideParams.keys) {
+                selection.resetEntityTexture(node)
+            }
+        }
+    }
+
+    private func handleSetEntityTextures(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let entries = call.arguments as? [[String: Any]] else {
+            result(FlutterError(code: "INVALID_ARGUMENT", message: "textures list required", details: nil))
+            return
+        }
+        DispatchQueue.main.async { [weak self] in
+            self?.applyTextureEntries(entries)
+            result(nil)
+        }
+    }
+
+    private func handleResetEntityTextures(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let names = call.arguments as? [String]
+        DispatchQueue.main.async { [weak self] in
+            self?.resetTextureEntries(names)
             result(nil)
         }
     }
@@ -474,5 +538,6 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
 
         pendingPreselectedEntities = nil
         pendingInitialOverrides = nil
+        pendingInitialTextures = nil
     }
 }

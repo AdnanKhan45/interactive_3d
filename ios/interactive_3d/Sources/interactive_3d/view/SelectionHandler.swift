@@ -131,12 +131,60 @@ class SelectionHandler {
         originalMaterials.removeValue(forKey: node)
     }
 
+    /// Decodes [data] into a base color texture and merges it into [node]'s
+    /// override. Stored as a UIImage so recompute does not re-decode.
+    func applyEntityTexture(to node: SCNNode, data: Data) {
+        guard let image = UIImage(data: data) else { return }
+        applyMaterialOverride(to: node, params: ["textureImage": Self.downsampled(image)])
+    }
+
+    /// Caps a texture at maxTextureDim on its longest side to bound GPU memory.
+    /// SceneKit documents no maximum, so we match the Android policy.
+    private static let maxTextureDim: CGFloat = 2048
+
+    private static func downsampled(_ image: UIImage) -> UIImage {
+        guard let cg = image.cgImage else { return image }
+        let pxW = CGFloat(cg.width), pxH = CGFloat(cg.height)
+        let longest = max(pxW, pxH)
+        guard longest > maxTextureDim else { return image }
+        let scale = maxTextureDim / longest
+        let size = CGSize(width: pxW * scale, height: pxH * scale)
+        print("interactive_3d: texture \(Int(pxW))x\(Int(pxH)) exceeds \(Int(maxTextureDim))px, downsampling to \(Int(size.width))x\(Int(size.height))")
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }
+    }
+
+    /// Removes the texture on [node], keeping any color/PBR override. Falls back
+    /// to a full override reset when nothing else remains.
+    func resetEntityTexture(_ node: SCNNode) {
+        guard var params = overrideParams[node], params["textureImage"] != nil else { return }
+        params.removeValue(forKey: "textureImage")
+        if params.isEmpty {
+            resetMaterialOverride(node)
+            return
+        }
+        overrideParams[node] = params
+
+        let parent = findNamedParent(of: node)
+        if let p = parent, selectedNodes.contains(p) { return }
+        if let geometry = node.geometry, let overrideMat = computeOverrideMaterial(for: node) {
+            geometry.materials = [overrideMat]
+        }
+    }
+
     /// Builds the override material for [node] from a fresh copy of its original,
     /// applying every accumulated param. Returns nil if no override is registered.
     private func computeOverrideMaterial(for node: SCNNode) -> SCNMaterial? {
         guard let params = overrideParams[node], let original = originalMaterials[node] else { return nil }
         let m = original.copy() as! SCNMaterial
 
+        if let img = params["textureImage"] as? UIImage {
+            m.diffuse.contents = img
+            m.diffuse.mipFilter = .linear
+        }
         if let c = params["color"] as? [Double], c.count == 4 {
             m.multiply.contents = UIColor(
                 red: CGFloat(c[0]), green: CGFloat(c[1]),

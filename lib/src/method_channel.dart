@@ -99,6 +99,7 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
     List<SequenceConfig>? selectionSequence,
     List<double>? backgroundColor,
     List<MaterialOverride>? initialMaterialOverrides,
+    List<EntityTexture>? initialEntityTextures,
   }) async {
     Uint8List modelBytes;
     String modelName;
@@ -139,6 +140,8 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
       'backgroundColor': backgroundColor,
       'initialMaterialOverrides':
           initialMaterialOverrides?.map((o) => o.toMap()).toList(),
+      'initialEntityTextures':
+          initialEntityTextures?.map((t) => t.toMap()).toList(),
     });
   }
 
@@ -159,6 +162,28 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
     List<String>? names,
   }) async {
     await _pluginChannel.invokeMethod('resetEntityMaterials', {
+      'textureId': textureId,
+      'names': names,
+    });
+  }
+
+  @override
+  Future<void> setEntityTextures({
+    required int textureId,
+    required List<EntityTexture> textures,
+  }) async {
+    await _pluginChannel.invokeMethod('setEntityTextures', {
+      'textureId': textureId,
+      'textures': textures.map((t) => t.toMap()).toList(),
+    });
+  }
+
+  @override
+  Future<void> resetEntityTextures({
+    required int textureId,
+    List<String>? names,
+  }) async {
+    await _pluginChannel.invokeMethod('resetEntityTextures', {
       'textureId': textureId,
       'names': names,
     });
