@@ -172,6 +172,12 @@ class Interactive3dTextureEntry(
     fun resetEntityMaterials(names: List<String>?) =
         mainHandler.post { filamentRenderer?.resetEntityMaterials(names) }
 
+    fun setEntityTextures(textures: List<Map<String, Any>>) =
+        mainHandler.post { filamentRenderer?.setEntityTextures(textures) }
+
+    fun resetEntityTextures(names: List<String>?) =
+        mainHandler.post { filamentRenderer?.resetEntityTextures(names) }
+
     fun onTap(x: Float, y: Float) =
         mainHandler.post { filamentRenderer?.onTap(x.toInt(), y.toInt()) }
 

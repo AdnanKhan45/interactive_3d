@@ -321,6 +321,20 @@ class FilamentRenderer(
         requestRender()
     }
 
+    fun setEntityTextures(textures: List<Map<String, Any>>) {
+        val eng = engine ?: return
+        val asset = modelLoader.currentAsset ?: return
+        selection.applyTexturesByName(textures, asset, eng)
+        requestRender()
+    }
+
+    fun resetEntityTextures(names: List<String>?) {
+        val eng = engine ?: return
+        val asset = modelLoader.currentAsset ?: return
+        selection.resetTexturesByName(names, asset, eng)
+        requestRender()
+    }
+
     // -------------------------------------------------------------------------
     // Environment
     // -------------------------------------------------------------------------

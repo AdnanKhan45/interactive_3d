@@ -67,6 +67,8 @@ class Interactive3dPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
       "removeFromCache" -> handleRemoveFromCache(call, result)
       "setEntityMaterials" -> handleSetEntityMaterials(call, result)
       "resetEntityMaterials" -> handleResetEntityMaterials(call, result)
+      "setEntityTextures" -> handleSetEntityTextures(call, result)
+      "resetEntityTextures" -> handleResetEntityTextures(call, result)
       "onTouchEvent" -> handleTouchEvent(call, result)
       else -> result.notImplemented()
     }
@@ -284,6 +286,31 @@ class Interactive3dPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
       ?: return result.error("TEXTURE_NOT_FOUND", "Texture $textureId not found", null)
 
     entry.resetEntityMaterials(call.argument("names"))
+    result.success(null)
+  }
+
+  private fun handleSetEntityTextures(call: MethodCall, result: MethodChannel.Result) {
+    val textureId = call.argument<Number>("textureId")?.toLong()
+    val textures = call.argument<List<Map<String, Any>>>("textures")
+
+    if (textureId == null || textures == null)
+      return result.error("INVALID_ARGUMENT", "textureId and textures required", null)
+
+    val entry = textureEntries[textureId]
+      ?: return result.error("TEXTURE_NOT_FOUND", "Texture $textureId not found", null)
+
+    entry.setEntityTextures(textures)
+    result.success(null)
+  }
+
+  private fun handleResetEntityTextures(call: MethodCall, result: MethodChannel.Result) {
+    val textureId = call.argument<Number>("textureId")?.toLong()
+      ?: return result.error("INVALID_ARGUMENT", "textureId required", null)
+
+    val entry = textureEntries[textureId]
+      ?: return result.error("TEXTURE_NOT_FOUND", "Texture $textureId not found", null)
+
+    entry.resetEntityTextures(call.argument("names"))
     result.success(null)
   }
 
