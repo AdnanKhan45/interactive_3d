@@ -439,6 +439,8 @@ internal class SelectionManager {
             .levels(levels)
             .format(Texture.InternalFormat.SRGB8_A8)
             .sampler(Texture.Sampler.SAMPLER_2D)
+            // GEN_MIPMAPPABLE is required by generateMipmaps; DEFAULT omits it.
+            .usage(Texture.Usage.DEFAULT or Texture.Usage.GEN_MIPMAPPABLE)
             .build(engine)
         try {
             TextureHelper.setBitmap(engine, texture, 0, bitmap)
