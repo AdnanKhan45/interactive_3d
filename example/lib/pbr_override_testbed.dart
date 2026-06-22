@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:interactive_3d/interactive_3d.dart';
 
 /// End-to-end testbed for runtime PBR overrides.
@@ -98,6 +99,45 @@ class _PbrOverrideTestbedState extends State<PbrOverrideTestbed> {
       action: 'Cleared selection.',
       expectation:
           'Selection ring removed. Overridden teeth should still show their override.',
+    );
+  }
+
+  // -- Texture actions ----------------------------------------------------
+
+  Future<void> _applyTexture({
+    required String assetPath,
+    required String label,
+    required String expectation,
+  }) async {
+    final name = _selectedName;
+    if (name == null) {
+      _setStatus(action: 'No tooth selected.', expectation: 'Tap a tooth first.');
+      return;
+    }
+    _setStatus(
+      action: 'Uploading $label to $name...',
+      expectation: 'Decoding and binding on the native side.',
+    );
+    final bytes = (await rootBundle.load(assetPath)).buffer.asUint8List();
+    await _controller.setEntityTexture(name: name, bytes: bytes);
+    _setStatus(
+      action: 'Applied $label to $name.',
+      expectation:
+          'Tooth surface shows the image; any active color tints it. Tap to add selection (texture hides), deselect to restore.',
+    );
+  }
+
+  Future<void> _resetTexture() async {
+    final name = _selectedName;
+    if (name == null) {
+      _setStatus(action: 'No tooth selected.', expectation: 'Tap a tooth first.');
+      return;
+    }
+    await _controller.resetEntityTexture(name);
+    _setStatus(
+      action: 'Reset texture on $name.',
+      expectation:
+          'Texture removed, GLB base color returns. Any color/PBR override stays.',
     );
   }
 
@@ -313,6 +353,22 @@ class _PbrOverrideTestbedState extends State<PbrOverrideTestbed> {
                   expectation:
                       'Tooth glows orange even in shadowed areas. Note: emissive replaces any GLB emission map.',
                 )),
+          ],
+        ),
+        _ActionSection(
+          label: 'Texture',
+          actions: [
+            _Action('Teeth tex', Colors.brown.shade400, () => _applyTexture(
+                  assetPath: 'assets/models/textures/teeth_baseColor.png',
+                  label: 'teeth base color',
+                  expectation: 'Tooth shows the teeth base-color image.',
+                )),
+            _Action('Mouth tex', Colors.purple.shade300, () => _applyTexture(
+                  assetPath: 'assets/models/textures/mouth_baseColor.png',
+                  label: 'mouth base color',
+                  expectation: 'Swaps to a different image at runtime.',
+                )),
+            _Action('Reset tex', Colors.brown.shade200, _resetTexture),
           ],
         ),
         _ActionSection(
