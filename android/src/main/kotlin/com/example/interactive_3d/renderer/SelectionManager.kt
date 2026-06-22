@@ -235,7 +235,10 @@ internal class SelectionManager {
             for (i in 0 until count) {
                 try {
                     val orig = originalMaterials[entity]?.get(i) ?: continue
-                    newMap[i] = orig.material.createInstance()
+                    // Duplicate copies the original's PBR maps and factors, so an
+                    // override changes only what it sets. createInstance would start
+                    // from material defaults and render as a metallic mirror.
+                    newMap[i] = MaterialInstance.duplicate(orig, "override")
                 } catch (e: Exception) {
                     Log.w(TAG, "Could not create override instance: ${e.message}")
                 }
