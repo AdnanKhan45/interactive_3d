@@ -98,6 +98,18 @@ abstract class Interactive3dPlatform extends PlatformInterface {
     List<String>? names,
   });
 
+  /// Applies one or more runtime base-color textures. Each merges into per-entity state.
+  Future<void> setEntityTextures({
+    required int textureId,
+    required List<EntityTexture> textures,
+  });
+
+  /// Removes runtime textures for [names], or all when [names] is null.
+  Future<void> resetEntityTextures({
+    required int textureId,
+    List<String>? names,
+  });
+
   /// Forwards a touch event to the native renderer.
   Future<void> onTouchEvent({
     required int textureId,

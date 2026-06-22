@@ -165,6 +165,28 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
   }
 
   @override
+  Future<void> setEntityTextures({
+    required int textureId,
+    required List<EntityTexture> textures,
+  }) async {
+    await _pluginChannel.invokeMethod('setEntityTextures', {
+      'textureId': textureId,
+      'textures': textures.map((t) => t.toMap()).toList(),
+    });
+  }
+
+  @override
+  Future<void> resetEntityTextures({
+    required int textureId,
+    List<String>? names,
+  }) async {
+    await _pluginChannel.invokeMethod('resetEntityTextures', {
+      'textureId': textureId,
+      'names': names,
+    });
+  }
+
+  @override
   Future<void> loadEnvironment({
     required int textureId,
     String? iblPath,

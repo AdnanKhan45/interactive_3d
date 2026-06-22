@@ -535,6 +535,33 @@ class Interactive3dState extends State<Interactive3d> {
     }
   }
 
+  Future<void> setEntityTextures(List<EntityTexture> textures) async {
+    if (textures.isEmpty) return;
+    final payload = textures.map((t) => t.toMap()).toList();
+    if (Platform.isIOS) {
+      await _iosMethodChannel?.invokeMethod('setEntityTextures', payload);
+    } else {
+      if (_platform == null || _textureId == null) return;
+      await _platform!.setEntityTextures(
+        textureId: _textureId!,
+        textures: textures,
+      );
+    }
+  }
+
+  /// Null [names] resets every active texture.
+  Future<void> resetEntityTextures(List<String>? names) async {
+    if (Platform.isIOS) {
+      await _iosMethodChannel?.invokeMethod('resetEntityTextures', names);
+    } else {
+      if (_platform == null || _textureId == null) return;
+      await _platform!.resetEntityTextures(
+        textureId: _textureId!,
+        names: names,
+      );
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
