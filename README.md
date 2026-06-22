@@ -1,11 +1,10 @@
+# interactive_3d [![Pub](https://img.shields.io/pub/v/interactive_3d.svg)](https://pub.dev/packages/interactive_3d)
+
 <p align="center">
   <img src="assets/FlutterFilament_logo_v2.png" alt="interactive_3d" width="440" />
 </p>
 
-<h1 align="center">interactive_3d</h1>
-
 <p align="center">
-  <a href="https://pub.dev/packages/interactive_3d"><img src="https://img.shields.io/pub/v/interactive_3d.svg" alt="pub version" /></a>
   <a href="https://pub.dev/packages/interactive_3d/score"><img src="https://img.shields.io/pub/points/interactive_3d" alt="pub points" /></a>
   <a href="https://pub.dev/packages/interactive_3d/score"><img src="https://img.shields.io/pub/likes/interactive_3d" alt="pub likes" /></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/license-MIT-purple.svg" alt="license MIT" /></a>
@@ -20,6 +19,17 @@
 
 > Built with healthcare in mind: let users explore a 3D model, tap any part of the body, and describe a complaint on a specific region or the whole body. The same building blocks fit medical visualizers, mechanical exploded views, and product configurators.
 
+## Demo
+
+Android and iOS:
+
+<p float="left">
+  <img src="https://media.giphy.com/media/LpzldzEwdglpoRJnrU/giphy.gif" width=200 />
+  <img src="https://media.giphy.com/media/nK7JDBH330RSaqi5y6/giphy.gif" width=200 />
+  <img src="https://media.giphy.com/media/YTh9FdZIaIqZd6KXR6/giphy.gif" width=200 />
+  <img src="https://media.giphy.com/media/aGAkEIzub789i3JVp1/giphy.gif" width=200 />
+</p>
+
 ## Contents
 
 - [Features](#features)
@@ -30,7 +40,6 @@
 - [Generate IBL and skybox](#generate-ibl-and-skybox)
 - [Runtime PBR material overrides](#runtime-pbr-material-overrides)
 - [Runtime base color textures](#runtime-base-color-textures)
-- [Demo](#demo)
 - [Contributing](#contributing)
 - [Maintainer](#maintainer)
 
@@ -318,17 +327,6 @@ Two things to know:
 - Base color images are treated as sRGB, and images larger than 2048px on the longest side are downsampled to bound GPU memory.
 
 Like overrides, textures are not persisted by the plugin. Re-apply them from your own state layer after the model loads.
-
-## Demo
-
-Android and iOS:
-
-<p float="left">
-  <img src="https://media.giphy.com/media/LpzldzEwdglpoRJnrU/giphy.gif" width=200 />
-  <img src="https://media.giphy.com/media/nK7JDBH330RSaqi5y6/giphy.gif" width=200 />
-  <img src="https://media.giphy.com/media/YTh9FdZIaIqZd6KXR6/giphy.gif" width=200 />
-  <img src="https://media.giphy.com/media/aGAkEIzub789i3JVp1/giphy.gif" width=200 />
-</p>
 
 ## Contributing
 
