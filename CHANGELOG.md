@@ -1,3 +1,11 @@
+## 2.2.0
+
+* 16th release of `interactive_3d`: **Runtime Base Color Textures** 🖼️
+- New controller API `setEntityTexture(name, bytes)` to upload a PNG or JPEG onto any entity at runtime, decoded natively. An active color override tints the uploaded texture.
+- `resetEntityTexture(name)` removes a texture while keeping any color/metallic/roughness override; `resetAllEntityTextures()` clears them all.
+- Textures merge into the same per-entity override as color and PBR factors and ride the selection precedence stack. The mesh must have UV coordinates; images larger than 2048px are downsampled.
+- Try it out from the **PBR Override Testbed** page in the example app.
+
 ## 2.1.1
 
 * 15th release of `interactive_3d`: **Flutter 3.44 Compatibility** 🛠️
