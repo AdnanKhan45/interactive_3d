@@ -281,6 +281,7 @@ class _PbrOverrideTestbedState extends State<PbrOverrideTestbed> {
       iblPath: 'assets/models/giuseppe_bridge_4k_ibl.ktx',
       skyboxPath: 'assets/models/giuseppe_bridge_4k_skybox.ktx',
       iOSBackgroundEnvPath: 'assets/models/san_giuseppe_bridge_4k.hdr',
+      defaultZoom: 2,
       selectionColor: const [0.0, 0.6, 1.0, 1.0],
       onSelectionChanged: _onSelectionChanged,
       initialMaterialOverrides:
