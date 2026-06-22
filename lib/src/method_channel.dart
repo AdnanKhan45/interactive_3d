@@ -99,6 +99,7 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
     List<SequenceConfig>? selectionSequence,
     List<double>? backgroundColor,
     List<MaterialOverride>? initialMaterialOverrides,
+    List<EntityTexture>? initialEntityTextures,
   }) async {
     Uint8List modelBytes;
     String modelName;
@@ -139,6 +140,8 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
       'backgroundColor': backgroundColor,
       'initialMaterialOverrides':
           initialMaterialOverrides?.map((o) => o.toMap()).toList(),
+      'initialEntityTextures':
+          initialEntityTextures?.map((t) => t.toMap()).toList(),
     });
   }
 

@@ -141,7 +141,8 @@ class Interactive3dPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         cacheColor = call.argument("cacheColor"),
         clearSelectionsOnHighlight = call.argument<Boolean>("clearSelectionsOnHighlight") ?: false,
         selectionSequence = call.argument("selectionSequence"),
-        initialMaterialOverrides = call.argument("initialMaterialOverrides")
+        initialMaterialOverrides = call.argument("initialMaterialOverrides"),
+        initialEntityTextures = call.argument("initialEntityTextures")
       )
       result.success(null)
     } catch (e: Exception) {

@@ -99,6 +99,9 @@ class Interactive3d extends StatefulWidget {
   /// visually; deselect restores the override.
   final List<MaterialOverride>? initialMaterialOverrides;
 
+  /// Base color textures to apply once when the model first loads.
+  final List<EntityTexture>? initialEntityTextures;
+
   const Interactive3d({
     super.key,
     this.modelPath,
@@ -125,6 +128,7 @@ class Interactive3d extends StatefulWidget {
     this.backgroundColor = Colors.black,
     this.loadingWidget,
     this.initialMaterialOverrides,
+    this.initialEntityTextures,
   });
 
   @override
@@ -281,6 +285,8 @@ class Interactive3dState extends State<Interactive3d> {
         'backgroundColor': widget.solidBackgroundColor,
         'initialMaterialOverrides':
             widget.initialMaterialOverrides?.map((o) => o.toMap()).toList(),
+        'initialEntityTextures':
+            widget.initialEntityTextures?.map((t) => t.toMap()).toList(),
       });
 
       // iOS HDR/EXR background
@@ -375,6 +381,7 @@ class Interactive3dState extends State<Interactive3d> {
       selectionSequence: widget.selectionSequence,
       backgroundColor: widget.solidBackgroundColor,
       initialMaterialOverrides: widget.initialMaterialOverrides,
+      initialEntityTextures: widget.initialEntityTextures,
     );
 
     await _platform!.loadEnvironment(

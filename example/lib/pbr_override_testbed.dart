@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:interactive_3d/interactive_3d.dart';
@@ -15,8 +17,10 @@ class PbrOverrideTestbed extends StatefulWidget {
 class _PbrOverrideTestbedState extends State<PbrOverrideTestbed> {
   final _controller = Interactive3dController();
 
-  // Tracked app-side so we can demo persistence via initialMaterialOverrides.
+  // Tracked app-side so we can demo persistence via initialMaterialOverrides
+  // and initialEntityTextures.
   final Map<String, MaterialOverride> _overrides = {};
+  final Map<String, Uint8List> _textures = {};
   String? _selectedName;
 
   // Mode flag drives widget rebuilds via _modelKey.
@@ -75,6 +79,7 @@ class _PbrOverrideTestbedState extends State<PbrOverrideTestbed> {
       return;
     }
     _overrides.remove(name);
+    _textures.remove(name);
     await _controller.resetEntityMaterial(name);
     _setStatus(
       action: 'Reset override on $name.',
@@ -85,7 +90,9 @@ class _PbrOverrideTestbedState extends State<PbrOverrideTestbed> {
 
   Future<void> _resetAll() async {
     _overrides.clear();
+    _textures.clear();
     await _controller.resetAllMaterialOverrides();
+    await _controller.resetAllEntityTextures();
     _setStatus(
       action: 'Reset every active override.',
       expectation:
@@ -120,6 +127,7 @@ class _PbrOverrideTestbedState extends State<PbrOverrideTestbed> {
     );
     final bytes = (await rootBundle.load(assetPath)).buffer.asUint8List();
     await _controller.setEntityTexture(name: name, bytes: bytes);
+    _textures[name] = bytes;
     _setStatus(
       action: 'Applied $label to $name.',
       expectation:
@@ -134,6 +142,7 @@ class _PbrOverrideTestbedState extends State<PbrOverrideTestbed> {
       return;
     }
     await _controller.resetEntityTexture(name);
+    _textures.remove(name);
     _setStatus(
       action: 'Reset texture on $name.',
       expectation:
@@ -174,7 +183,10 @@ class _PbrOverrideTestbedState extends State<PbrOverrideTestbed> {
       _useInitialOverrides = withInitialOverrides;
       _modelKey++;
       _selectedName = null;
-      if (!withInitialOverrides) _overrides.clear();
+      if (!withInitialOverrides) {
+        _overrides.clear();
+        _textures.clear();
+      }
       _lastAction = label;
       _expectation = expectation;
     });
@@ -286,6 +298,11 @@ class _PbrOverrideTestbedState extends State<PbrOverrideTestbed> {
       onSelectionChanged: _onSelectionChanged,
       initialMaterialOverrides:
           _useInitialOverrides ? _overrides.values.toList() : null,
+      initialEntityTextures: _useInitialOverrides
+          ? _textures.entries
+              .map((e) => EntityTexture(name: e.key, bytes: e.value))
+              .toList()
+          : null,
     );
   }
 
@@ -390,7 +407,7 @@ class _PbrOverrideTestbedState extends State<PbrOverrideTestbed> {
                           'Fresh model. No overrides, no cache, no sequence. Use this between tests.',
                     )),
             _Action('+Initial', Colors.teal.shade600, () {
-              if (_overrides.isEmpty) {
+              if (_overrides.isEmpty && _textures.isEmpty) {
                 _setStatus(
                   action: 'No overrides to seed.',
                   expectation:

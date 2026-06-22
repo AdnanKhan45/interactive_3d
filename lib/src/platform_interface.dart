@@ -43,6 +43,7 @@ abstract class Interactive3dPlatform extends PlatformInterface {
     List<SequenceConfig>? selectionSequence,
     List<double>? backgroundColor,
     List<MaterialOverride>? initialMaterialOverrides,
+    List<EntityTexture>? initialEntityTextures,
   });
 
   /// Loads IBL and skybox environment lighting.

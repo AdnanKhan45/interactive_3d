@@ -23,6 +23,7 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
     // State
     private var pendingPreselectedEntities: [String]?
     private var pendingInitialOverrides: [[String: Any]]?
+    private var pendingInitialTextures: [[String: Any]]?
     private var isDisposed = false
 
     init(frame: CGRect, viewId: Int64, messenger: FlutterBinaryMessenger, args: Any?) {
@@ -131,6 +132,7 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
         selection.clearSelectionsOnHighlight = (args["clearSelectionsOnHighlight"] as? Bool) ?? false
         pendingPreselectedEntities = args["preselectedEntities"] as? [String]
         pendingInitialOverrides = args["initialMaterialOverrides"] as? [[String: Any]]
+        pendingInitialTextures = args["initialEntityTextures"] as? [[String: Any]]
 
         // Configure sequence
         if let seqArray = args["selectionSequence"] as? [[String: Any]] {
@@ -184,6 +186,7 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
                 // Apply initial overrides before cache/preselections so override
                 // is the deselect target underneath any selection layered above.
                 self.applyInitialOverrides()
+                self.applyInitialTextures()
 
                 // Apply cache highlights (skips overridden entities internally).
                 if let scene = self.scnView.scene {
@@ -374,6 +377,12 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
         pendingInitialOverrides = nil
     }
 
+    private func applyInitialTextures() {
+        guard let entries = pendingInitialTextures, !entries.isEmpty else { return }
+        applyTextureEntries(entries)
+        pendingInitialTextures = nil
+    }
+
     private func applyOverrideEntries(_ entries: [[String: Any]]) {
         guard let scene = scnView.scene else { return }
         for entry in entries {
@@ -529,5 +538,6 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
 
         pendingPreselectedEntities = nil
         pendingInitialOverrides = nil
+        pendingInitialTextures = nil
     }
 }

@@ -243,6 +243,17 @@ await controller.resetEntityTexture('Tooth_7');
 await controller.resetAllEntityTextures();
 ```
 
+Apply textures on model load by passing them to the widget, the same way as overrides:
+
+```dart
+Interactive3d(
+  modelPath: 'assets/models/Tooth-3.glb',
+  initialEntityTextures: [
+    EntityTexture(name: 'Tooth_7', bytes: woodBytes),
+  ],
+)
+```
+
 The texture merges into the same per-entity override as color and PBR factors: setting a color after a texture keeps the texture, and the reverse holds too. Selection still wins visually while active, and the texture returns on deselect. `resetEntityMaterial` clears everything on the entity, including the texture.
 
 Two things to know:

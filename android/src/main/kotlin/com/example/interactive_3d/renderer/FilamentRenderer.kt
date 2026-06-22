@@ -251,7 +251,8 @@ class FilamentRenderer(
         cacheColor: List<Double>?,
         clearSelectionsOnHighlight: Boolean = false,
         selectionSequence: List<Map<String, Any>>? = null,
-        initialMaterialOverrides: List<Map<String, Any>>? = null
+        initialMaterialOverrides: List<Map<String, Any>>? = null,
+        initialEntityTextures: List<Map<String, Any>>? = null
     ) {
         val eng = engine ?: return
         val scn = scene ?: return
@@ -297,6 +298,9 @@ class FilamentRenderer(
         // Apply overrides first so they sit underneath any selection that follows.
         if (!initialMaterialOverrides.isNullOrEmpty()) {
             selection.applyOverridesByName(initialMaterialOverrides, asset, eng)
+        }
+        if (!initialEntityTextures.isNullOrEmpty()) {
+            selection.applyTexturesByName(initialEntityTextures, asset, eng)
         }
 
         // Apply preselections and cache highlights
