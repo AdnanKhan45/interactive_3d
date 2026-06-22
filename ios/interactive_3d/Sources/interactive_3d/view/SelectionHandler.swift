@@ -135,7 +135,26 @@ class SelectionHandler {
     /// override. Stored as a UIImage so recompute does not re-decode.
     func applyEntityTexture(to node: SCNNode, data: Data) {
         guard let image = UIImage(data: data) else { return }
-        applyMaterialOverride(to: node, params: ["textureImage": image])
+        applyMaterialOverride(to: node, params: ["textureImage": Self.downsampled(image)])
+    }
+
+    /// Caps a texture at maxTextureDim on its longest side to bound GPU memory.
+    /// SceneKit documents no maximum, so we match the Android policy.
+    private static let maxTextureDim: CGFloat = 2048
+
+    private static func downsampled(_ image: UIImage) -> UIImage {
+        guard let cg = image.cgImage else { return image }
+        let pxW = CGFloat(cg.width), pxH = CGFloat(cg.height)
+        let longest = max(pxW, pxH)
+        guard longest > maxTextureDim else { return image }
+        let scale = maxTextureDim / longest
+        let size = CGSize(width: pxW * scale, height: pxH * scale)
+        print("interactive_3d: texture \(Int(pxW))x\(Int(pxH)) exceeds \(Int(maxTextureDim))px, downsampling to \(Int(size.width))x\(Int(size.height))")
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }
     }
 
     /// Removes the texture on [node], keeping any color/PBR override. Falls back
