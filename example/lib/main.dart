@@ -4,7 +4,6 @@ import 'package:interactive_3d_example/glb_loader_example.dart';
 import 'package:interactive_3d_example/memory_test_page.dart';
 import 'package:interactive_3d_example/pbr_override_testbed.dart';
 
-
 void main() {
   runApp(const MyApp());
 }
@@ -52,9 +51,9 @@ class HomePage extends StatelessWidget {
                     Text(
                       'Welcome to Interactive 3D Plugin',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.deepPurple.shade900,
-                      ),
+                            fontWeight: FontWeight.bold,
+                            color: Colors.deepPurple.shade900,
+                          ),
                     ),
                     const SizedBox(height: 8),
                     const Text(
@@ -71,7 +70,8 @@ class HomePage extends StatelessWidget {
             _ExampleButton(
               icon: Icons.memory,
               title: 'Memory Leak Test',
-              description: 'Test memory management by navigating back and forth',
+              description:
+                  'Test memory management by navigating back and forth',
               color: Colors.red,
               onTap: () {
                 Navigator.push(
@@ -117,7 +117,6 @@ class HomePage extends StatelessWidget {
               },
             ),
             const SizedBox(height: 24),
-
           ],
         ),
       ),
@@ -154,7 +153,7 @@ class _ExampleButton extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(

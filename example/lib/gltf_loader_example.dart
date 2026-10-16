@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:interactive_3d/interactive_3d.dart';
 import 'result_page.dart';
@@ -7,12 +6,10 @@ class GltfLoaderExample extends StatefulWidget {
   const GltfLoaderExample({super.key});
 
   @override
-  GltfLoaderExampleState createState() =>
-      GltfLoaderExampleState();
+  GltfLoaderExampleState createState() => GltfLoaderExampleState();
 }
 
-class GltfLoaderExampleState
-    extends State<GltfLoaderExample> {
+class GltfLoaderExampleState extends State<GltfLoaderExample> {
   List<EntityData> _selectedEntities = [];
 
   @override
@@ -23,24 +20,24 @@ class GltfLoaderExampleState
         children: [
           Expanded(
               child: Interactive3d(
-                modelPath: 'assets/models/Tooth-2.gltf',
-                iblPath: 'assets/models/venetian_crossroads_2k_ibl.ktx',
-                skyboxPath: 'assets/models/venetian_crossroads_2k_skybox.ktx',
-                resources: [
-                  'scene.bin',
-                  'textures/mouth_baseColor.png',
-                  'textures/mouth_metallicRoughness.png',
-                  'textures/mouth_normal.png',
-                  'textures/teeth_baseColor.png',
-                  'textures/teeth_metallicRoughness.png',
-                  'textures/teeth_normal.png',
-                ],
-                onSelectionChanged: (selectedEntities) {
-                  setState(() {
-                    _selectedEntities = selectedEntities;
-                  });
-                },
-              )),
+            modelPath: 'assets/models/Tooth-2.gltf',
+            iblPath: 'assets/models/venetian_crossroads_2k_ibl.ktx',
+            skyboxPath: 'assets/models/venetian_crossroads_2k_skybox.ktx',
+            resources: [
+              'scene.bin',
+              'textures/mouth_baseColor.png',
+              'textures/mouth_metallicRoughness.png',
+              'textures/mouth_normal.png',
+              'textures/teeth_baseColor.png',
+              'textures/teeth_metallicRoughness.png',
+              'textures/teeth_normal.png',
+            ],
+            onSelectionChanged: (selectedEntities) {
+              setState(() {
+                _selectedEntities = selectedEntities;
+              });
+            },
+          )),
           Container(
             height: 150,
             color: Colors.grey[200],
@@ -51,7 +48,8 @@ class GltfLoaderExampleState
                 return ListTile(
                   onTap: () {
                     Navigator.of(context).push(MaterialPageRoute(
-                        builder: (context) => ResultPage(data: _selectedEntities)));
+                        builder: (context) =>
+                            ResultPage(data: _selectedEntities)));
                   },
                   title: Text('Entity ID: ${entity.id}'),
                   subtitle: Text('Name: ${entity.name}'),

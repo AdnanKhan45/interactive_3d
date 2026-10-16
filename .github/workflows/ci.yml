@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyze-and-test:
+    name: Analyze and test (Flutter ${{ matrix.label }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Oldest Flutter the plugin supports (pubspec constraint).
+          - label: "3.44.0"
+            version: "3.44.0"
+            check_format: true
+          - label: stable
+            version: ""
+            check_format: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ matrix.version }}
+          cache: true
+
+      - name: Install dependencies
+        run: |
+          flutter pub get
+          (cd example && flutter pub get)
+
+      # Formatter output can shift between SDK releases, so it is enforced on the pinned version only.
+      - name: Check formatting
+        if: matrix.check_format
+        run: |
+          paths=()
+          for d in lib test example/lib example/test example/integration_test; do
+            if [ -d "$d" ]; then paths+=("$d"); fi
+          done
+          dart format --output=none --set-exit-if-changed "${paths[@]}"
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Run tests
+        run: |
+          if [ -d test ]; then
+            flutter test
+          else
+            echo "No test directory yet."
+          fi
+
+  build-android:
+    name: Build example (Android)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Build debug APK
+        working-directory: example
+        run: flutter build apk --debug
+
+  build-ios:
+    name: Build example (iOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Build for simulator
+        working-directory: example
+        run: flutter build ios --simulator --debug --no-codesign

@@ -182,7 +182,10 @@ class Interactive3dState extends State<Interactive3d> {
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
 
-        if (_textureId == null && !_isInitializing && size.width > 0 && size.height > 0) {
+        if (_textureId == null &&
+            !_isInitializing &&
+            size.width > 0 &&
+            size.height > 0) {
           final dpr = MediaQuery.of(context).devicePixelRatio;
           // High-end: near-native quality, Mid: balanced, Low: max performance
           // The native DeviceCapability tier is detected on init — here we approximate
@@ -200,7 +203,8 @@ class Interactive3dState extends State<Interactive3d> {
           color: widget.backgroundColor,
           child: _textureId != null
               ? _buildTextureWidget()
-              : (widget.loadingWidget ?? const Center(child: CircularProgressIndicator())),
+              : (widget.loadingWidget ??
+                  const Center(child: CircularProgressIndicator())),
         );
       },
     );
@@ -227,14 +231,16 @@ class Interactive3dState extends State<Interactive3d> {
     _iosMethodChannel = MethodChannel('interactive_3d_$viewId');
     final eventChannel = EventChannel('interactive_3d_events_$viewId');
 
-    _iosEventSubscription = eventChannel.receiveBroadcastStream().listen((event) {
+    _iosEventSubscription =
+        eventChannel.receiveBroadcastStream().listen((event) {
       final map = event as Map<dynamic, dynamic>;
       final String eventType = map['event'];
 
       if (eventType == 'selectionChanged') {
         final List<dynamic> selected = map['selectedEntities'];
         final entities = selected
-            .map((e) => EntityData(id: e['id'] as int, name: e['name'] as String))
+            .map((e) =>
+                EntityData(id: e['id'] as int, name: e['name'] as String))
             .toList();
         widget.onSelectionChanged?.call(entities);
       } else if (eventType == 'cacheSelectionChanged') {
@@ -281,7 +287,8 @@ class Interactive3dState extends State<Interactive3d> {
         'enableCache': widget.enableCache,
         'cacheColor': widget.cacheColor,
         'clearSelectionsOnHighlight': widget.clearSelectionOnHighlight,
-        'selectionSequence': widget.selectionSequence?.map((c) => c.toJson()).toList(),
+        'selectionSequence':
+            widget.selectionSequence?.map((c) => c.toJson()).toList(),
         'backgroundColor': widget.solidBackgroundColor,
         'initialMaterialOverrides':
             widget.initialMaterialOverrides?.map((o) => o.toMap()).toList(),
@@ -290,21 +297,27 @@ class Interactive3dState extends State<Interactive3d> {
       });
 
       // iOS HDR/EXR background
-      if (widget.iOSBackgroundEnvPath != null || widget.iOSBackgroundEnvUrl != null) {
+      if (widget.iOSBackgroundEnvPath != null ||
+          widget.iOSBackgroundEnvUrl != null) {
         Uint8List? bgBytes;
         if (widget.iOSBackgroundEnvPath != null) {
-          bgBytes = (await rootBundle.load(widget.iOSBackgroundEnvPath!)).buffer.asUint8List();
+          bgBytes = (await rootBundle.load(widget.iOSBackgroundEnvPath!))
+              .buffer
+              .asUint8List();
         } else if (widget.iOSBackgroundEnvUrl != null) {
-          final response = await http.get(Uri.parse(widget.iOSBackgroundEnvUrl!));
+          final response =
+              await http.get(Uri.parse(widget.iOSBackgroundEnvUrl!));
           if (response.statusCode == 200) bgBytes = response.bodyBytes;
         }
         if (bgBytes != null) {
-          await channel.invokeMethod('loadHdrBackground', {'backgroundBytes': bgBytes});
+          await channel
+              .invokeMethod('loadHdrBackground', {'backgroundBytes': bgBytes});
         }
       }
 
       if (widget.defaultZoom != null) {
-        await channel.invokeMethod('setZoomLevel', {'zoom': widget.defaultZoom});
+        await channel
+            .invokeMethod('setZoomLevel', {'zoom': widget.defaultZoom});
       }
     } catch (e) {
       debugPrint('Error loading iOS model: $e');
@@ -511,7 +524,8 @@ class Interactive3dState extends State<Interactive3d> {
       await _iosMethodChannel?.invokeMethod('unselectEntities', entityIds);
     } else {
       if (_platform == null || _textureId == null) return;
-      await _platform!.unselectEntities(textureId: _textureId!, entityIds: entityIds);
+      await _platform!
+          .unselectEntities(textureId: _textureId!, entityIds: entityIds);
     }
   }
 
@@ -578,9 +592,11 @@ class Interactive3dState extends State<Interactive3d> {
 
     String baseDir = '';
     if (widget.modelPath != null) {
-      baseDir = widget.modelPath!.substring(0, widget.modelPath!.lastIndexOf('/') + 1);
+      baseDir = widget.modelPath!
+          .substring(0, widget.modelPath!.lastIndexOf('/') + 1);
     } else if (widget.modelUrl != null) {
-      baseDir = widget.modelUrl!.substring(0, widget.modelUrl!.lastIndexOf('/') + 1);
+      baseDir =
+          widget.modelUrl!.substring(0, widget.modelUrl!.lastIndexOf('/') + 1);
     }
 
     for (final file in widget.resources) {

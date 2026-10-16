@@ -37,16 +37,16 @@ class _MemoryTestPageState extends State<MemoryTestPage> {
                     Text(
                       'Memory Leak Test Instructions',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                            fontWeight: FontWeight.bold,
+                          ),
                     ),
                     const SizedBox(height: 8),
                     const Text(
                       '1. Tap "Open 3D Viewer" to load the model\n'
-                          '2. Interact with the model if you want\n'
-                          '3. Press back button to return here\n'
-                          '4. Repeat steps 1-3 multiple times (10-15 times)\n'
-                          '5. If the app doesn\'t crash, memory leak is fixed! ✅',
+                      '2. Interact with the model if you want\n'
+                      '3. Press back button to return here\n'
+                      '4. Repeat steps 1-3 multiple times (10-15 times)\n'
+                      '5. If the app doesn\'t crash, memory leak is fixed! ✅',
                       style: TextStyle(fontSize: 14),
                     ),
                   ],
@@ -72,11 +72,11 @@ class _MemoryTestPageState extends State<MemoryTestPage> {
                     Text(
                       '$navigationCount',
                       style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: navigationCount > 10
-                            ? Colors.green
-                            : Colors.orange,
-                      ),
+                            fontWeight: FontWeight.bold,
+                            color: navigationCount > 10
+                                ? Colors.green
+                                : Colors.orange,
+                          ),
                     ),
                     if (navigationCount > 10)
                       const Padding(
@@ -148,32 +148,32 @@ class _MemoryTestPageState extends State<MemoryTestPage> {
                     Expanded(
                       child: navigationLog.isEmpty
                           ? const Center(
-                        child: Text(
-                          'No navigation history yet.\nTap "Open 3D Viewer" to start.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                      )
-                          : ListView.builder(
-                        itemCount: navigationLog.length,
-                        itemBuilder: (context, index) {
-                          return ListTile(
-                            dense: true,
-                            leading: CircleAvatar(
-                              radius: 12,
-                              backgroundColor: Colors.deepPurple,
                               child: Text(
-                                '${index + 1}',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.white,
-                                ),
+                                'No navigation history yet.\nTap "Open 3D Viewer" to start.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.grey),
                               ),
+                            )
+                          : ListView.builder(
+                              itemCount: navigationLog.length,
+                              itemBuilder: (context, index) {
+                                return ListTile(
+                                  dense: true,
+                                  leading: CircleAvatar(
+                                    radius: 12,
+                                    backgroundColor: Colors.deepPurple,
+                                    child: Text(
+                                      '${index + 1}',
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                  title: Text(navigationLog[index]),
+                                );
+                              },
                             ),
-                            title: Text(navigationLog[index]),
-                          );
-                        },
-                      ),
                     ),
                   ],
                 ),
@@ -189,7 +189,8 @@ class _MemoryTestPageState extends State<MemoryTestPage> {
     final timestamp = DateTime.now().toString().substring(11, 19);
     setState(() {
       navigationCount++;
-      navigationLog.add('[$timestamp] Navigated to 3D Viewer (#$navigationCount)');
+      navigationLog
+          .add('[$timestamp] Navigated to 3D Viewer (#$navigationCount)');
     });
 
     // Navigate to the 3D viewer
@@ -203,7 +204,8 @@ class _MemoryTestPageState extends State<MemoryTestPage> {
     // When we come back
     setState(() {
       final returnTime = DateTime.now().toString().substring(11, 19);
-      navigationLog.add('[$returnTime] Returned from 3D Viewer (#$navigationCount)');
+      navigationLog
+          .add('[$returnTime] Returned from 3D Viewer (#$navigationCount)');
     });
   }
 
@@ -250,8 +252,8 @@ class _MemoryTestViewerPageState extends State<MemoryTestViewerPage> {
                   title: const Text('Memory Test Info'),
                   content: const Text(
                     'Interact with the model, then press back.\n\n'
-                        'If you can do this 10+ times without crashing, '
-                        'the memory leak is fixed!',
+                    'If you can do this 10+ times without crashing, '
+                    'the memory leak is fixed!',
                   ),
                   actions: [
                     TextButton(
@@ -283,7 +285,7 @@ class _MemoryTestViewerPageState extends State<MemoryTestViewerPage> {
               iblPath: 'assets/models/giuseppe_bridge_4k_ibl.ktx',
               skyboxPath: 'assets/models/giuseppe_bridge_4k_skybox.ktx',
               iOSBackgroundEnvPath: 'assets/models/meadow_2_4k.hdr',
-              selectionColor: const [0.0, 0.4, 1.0, 1.0] ,
+              selectionColor: const [0.0, 0.4, 1.0, 1.0],
               defaultZoom: 2,
               onSelectionChanged: (selectedEntities) {
                 setState(() {
@@ -303,10 +305,14 @@ class _MemoryTestViewerPageState extends State<MemoryTestViewerPage> {
                 ),
               ],
               patchColors: [
-                PatchColor(name: "Hard_Plate_L", color: [0.41, 0.35, 0.51, 1.0]),
-                PatchColor(name: "Hard_Plate_R", color: [0.41, 0.35, 0.51, 1.0]),
-                PatchColor(name: "Soft_Plate_R", color: [0.41, 0.35, 0.51, 1.0]),
-                PatchColor(name: "Soft_Plate_L", color: [0.41, 0.35, 0.51, 1.0]),
+                PatchColor(
+                    name: "Hard_Plate_L", color: [0.41, 0.35, 0.51, 1.0]),
+                PatchColor(
+                    name: "Hard_Plate_R", color: [0.41, 0.35, 0.51, 1.0]),
+                PatchColor(
+                    name: "Soft_Plate_R", color: [0.41, 0.35, 0.51, 1.0]),
+                PatchColor(
+                    name: "Soft_Plate_L", color: [0.41, 0.35, 0.51, 1.0]),
                 PatchColor(name: "Neck", color: [0.58, 0.50, 0.43, 1.0]),
               ],
             ),
@@ -346,33 +352,33 @@ class _MemoryTestViewerPageState extends State<MemoryTestViewerPage> {
                 Expanded(
                   child: _selectedEntities.isEmpty
                       ? const Center(
-                    child: Text(
-                      'Tap on model parts to select them',
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                  )
-                      : ListView.builder(
-                    itemCount: _selectedEntities.length,
-                    itemBuilder: (context, index) {
-                      final entity = _selectedEntities[index];
-                      return ListTile(
-                        dense: true,
-                        leading: CircleAvatar(
-                          radius: 12,
-                          backgroundColor: Colors.deepPurple,
                           child: Text(
-                            '${index + 1}',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: Colors.white,
-                            ),
+                            'Tap on model parts to select them',
+                            style: TextStyle(color: Colors.grey),
                           ),
+                        )
+                      : ListView.builder(
+                          itemCount: _selectedEntities.length,
+                          itemBuilder: (context, index) {
+                            final entity = _selectedEntities[index];
+                            return ListTile(
+                              dense: true,
+                              leading: CircleAvatar(
+                                radius: 12,
+                                backgroundColor: Colors.deepPurple,
+                                child: Text(
+                                  '${index + 1}',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                              title: Text(entity.name),
+                              subtitle: Text('ID: ${entity.id}'),
+                            );
+                          },
                         ),
-                        title: Text(entity.name),
-                        subtitle: Text('ID: ${entity.id}'),
-                      );
-                    },
-                  ),
                 ),
               ],
             ),
