@@ -175,13 +175,18 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             sceneManager.useSolidBackground = false
         }
 
+        let modelName = (args["name"] as? String) ?? ""
+        let resources = ((args["resources"] as? [String: FlutterStandardTypedData]) ?? [:])
+            .mapValues { $0.data }
+
         // Reset previous selection state
         selection.reset()
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             do {
-                try self.sceneManager.loadModel(modelBytes: modelBytes)
+                try self.sceneManager.loadModel(
+                    modelBytes: modelBytes, name: modelName, resources: resources)
 
                 // Apply initial overrides before cache/preselections so override
                 // is the deselect target underneath any selection layered above.

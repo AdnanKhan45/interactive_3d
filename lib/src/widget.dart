@@ -276,9 +276,15 @@ class Interactive3dState extends State<Interactive3d> {
         return;
       }
 
+      final resources = modelName.endsWith('.gltf')
+          ? await _loadGltfResources()
+          : const <String, ByteData>{};
+
       await channel.invokeMethod('loadModel', {
         'modelBytes': modelBytes,
         'name': modelName,
+        'resources': resources.map((path, data) => MapEntry(path,
+            data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes))),
         'preselectedEntities': widget.preselectedEntities,
         'selectionColor': widget.selectionColor,
         'patchColors': widget.patchColors

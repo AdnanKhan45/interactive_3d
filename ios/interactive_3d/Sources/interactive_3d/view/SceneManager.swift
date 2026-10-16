@@ -54,9 +54,9 @@ class SceneManager {
     /// Loads a GLB/glTF model from raw bytes into the scene view.
     ///
     /// Tries SCNSceneSource first (faster for simple models), falls back to
-    /// GLTFSceneSource for full glTF 2.0 support. Adds default lighting if
-    /// the model doesn't include any light nodes.
-    func loadModel(modelBytes: Data) throws {
+    /// GLTFSceneSource for full glTF 2.0 support. [resources] holds a .gltf's
+    /// external files keyed by path relative to the model.
+    func loadModel(modelBytes: Data, name: String, resources: [String: Data]) throws {
         cleanupPreviousModel()
 
         let scene: SCNScene
@@ -71,12 +71,7 @@ class SceneManager {
             }
             scene = loadedScene
         } catch {
-            // Fallback: write to temp file and load via GLTFSceneSource
-            let tempPath = NSTemporaryDirectory().appending("model.glb")
-            try modelBytes.write(to: URL(fileURLWithPath: tempPath))
-            defer { try? FileManager.default.removeItem(atPath: tempPath) }
-            let gltfSource = try GLTFSceneSource(url: URL(fileURLWithPath: tempPath))
-            scene = try gltfSource.scene()
+            scene = try loadWithGLTFSceneKit(modelBytes: modelBytes, name: name, resources: resources)
         }
 
         // Apply fallback materials to nodes without diffuse content
@@ -174,6 +169,31 @@ class SceneManager {
     }
 
     // MARK: - Private
+
+    private func loadWithGLTFSceneKit(modelBytes: Data, name: String, resources: [String: Data]) throws -> SCNScene {
+        // GLTFSceneKit resolves external URIs relative to the model file and reads
+        // them during load, so the files only need to exist together until then.
+        let fileManager = FileManager.default
+        let dir = fileManager.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: dir) }
+
+        let fileName = (name as NSString).lastPathComponent
+        let modelURL = dir.appendingPathComponent(fileName.isEmpty ? "model.glb" : fileName)
+        try modelBytes.write(to: modelURL)
+
+        let root = dir.standardizedFileURL.path + "/"
+        for (path, data) in resources {
+            let url = dir.appendingPathComponent(path).standardizedFileURL
+            guard url.path.hasPrefix(root) else { continue }
+            try fileManager.createDirectory(
+                at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try data.write(to: url)
+        }
+
+        return try GLTFSceneSource(url: modelURL).scene()
+    }
 
     private func hasLightNodes(in node: SCNNode) -> Bool {
         if node.light != nil { return true }
