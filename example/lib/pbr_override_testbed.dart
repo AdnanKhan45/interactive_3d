@@ -51,7 +51,8 @@ class _PbrOverrideTestbedState extends State<PbrOverrideTestbed> {
   }) async {
     final name = _selectedName;
     if (name == null) {
-      _setStatus(action: 'No tooth selected.', expectation: 'Tap a tooth first.');
+      _setStatus(
+          action: 'No tooth selected.', expectation: 'Tap a tooth first.');
       return;
     }
     final update = MaterialOverride(
@@ -75,7 +76,8 @@ class _PbrOverrideTestbedState extends State<PbrOverrideTestbed> {
   Future<void> _resetSelected() async {
     final name = _selectedName;
     if (name == null) {
-      _setStatus(action: 'No tooth selected.', expectation: 'Tap a tooth first.');
+      _setStatus(
+          action: 'No tooth selected.', expectation: 'Tap a tooth first.');
       return;
     }
     _overrides.remove(name);
@@ -118,7 +120,8 @@ class _PbrOverrideTestbedState extends State<PbrOverrideTestbed> {
   }) async {
     final name = _selectedName;
     if (name == null) {
-      _setStatus(action: 'No tooth selected.', expectation: 'Tap a tooth first.');
+      _setStatus(
+          action: 'No tooth selected.', expectation: 'Tap a tooth first.');
       return;
     }
     _setStatus(
@@ -138,7 +141,8 @@ class _PbrOverrideTestbedState extends State<PbrOverrideTestbed> {
   Future<void> _resetTexture() async {
     final name = _selectedName;
     if (name == null) {
-      _setStatus(action: 'No tooth selected.', expectation: 'Tap a tooth first.');
+      _setStatus(
+          action: 'No tooth selected.', expectation: 'Tap a tooth first.');
       return;
     }
     await _controller.resetEntityTexture(name);
@@ -312,80 +316,109 @@ class _PbrOverrideTestbedState extends State<PbrOverrideTestbed> {
         _ActionSection(
           label: 'Full PBR',
           actions: [
-            _Action('Cavity', Colors.red.shade700, () => _applyOverride(
-                  label: 'Cavity (red matte)',
-                  color: const [0.85, 0.15, 0.15, 1.0],
-                  metallic: 0.0,
-                  roughness: 0.9,
-                  expectation:
-                      'Red-tinted tooth, enamel texture still visible. Tap to add blue selection on top, tap again to deselect, override returns.',
-                )),
-            _Action('Filling', Colors.amber.shade700, () => _applyOverride(
-                  label: 'Filling (gold metal)',
-                  color: const [0.85, 0.7, 0.2, 1.0],
-                  metallic: 0.9,
-                  roughness: 0.2,
-                  expectation:
-                      'Tooth looks shiny gold. Light should reflect off it.',
-                )),
-            _Action('Crown', Colors.grey.shade400, () => _applyOverride(
-                  label: 'Crown (white satin)',
-                  color: const [1.0, 1.0, 1.0, 1.0],
-                  metallic: 0.1,
-                  roughness: 0.4,
-                  expectation: 'Tooth becomes slightly brighter white.',
-                )),
-            _Action('Inflamed', Colors.pink.shade300, () => _applyOverride(
-                  label: 'Inflamed (pink)',
-                  color: const [1.0, 0.5, 0.6, 1.0],
-                  metallic: 0.0,
-                  roughness: 0.7,
-                  expectation: 'Pink tint, texture preserved.',
-                )),
+            _Action(
+                'Cavity',
+                Colors.red.shade700,
+                () => _applyOverride(
+                      label: 'Cavity (red matte)',
+                      color: const [0.85, 0.15, 0.15, 1.0],
+                      metallic: 0.0,
+                      roughness: 0.9,
+                      expectation:
+                          'Red-tinted tooth, enamel texture still visible. Tap to add blue selection on top, tap again to deselect, override returns.',
+                    )),
+            _Action(
+                'Filling',
+                Colors.amber.shade700,
+                () => _applyOverride(
+                      label: 'Filling (gold metal)',
+                      color: const [0.85, 0.7, 0.2, 1.0],
+                      metallic: 0.9,
+                      roughness: 0.2,
+                      expectation:
+                          'Tooth looks shiny gold. Light should reflect off it.',
+                    )),
+            _Action(
+                'Crown',
+                Colors.grey.shade400,
+                () => _applyOverride(
+                      label: 'Crown (white satin)',
+                      color: const [1.0, 1.0, 1.0, 1.0],
+                      metallic: 0.1,
+                      roughness: 0.4,
+                      expectation: 'Tooth becomes slightly brighter white.',
+                    )),
+            _Action(
+                'Inflamed',
+                Colors.pink.shade300,
+                () => _applyOverride(
+                      label: 'Inflamed (pink)',
+                      color: const [1.0, 0.5, 0.6, 1.0],
+                      metallic: 0.0,
+                      roughness: 0.7,
+                      expectation: 'Pink tint, texture preserved.',
+                    )),
           ],
         ),
         _ActionSection(
           label: 'Partial',
           actions: [
-            _Action('Color blue', Colors.blue, () => _applyOverride(
-                  label: 'Color only blue',
-                  color: const [0.2, 0.4, 1.0, 1.0],
-                  expectation:
-                      'Only color changes. Metallic/roughness from any previous override are preserved (test sticky updates).',
-                )),
-            _Action('Metallic 1.0', Colors.grey.shade700, () => _applyOverride(
-                  label: 'Metallic only 1.0',
-                  metallic: 1.0,
-                  expectation:
-                      'Tooth becomes fully metallic. Color from any previous override is preserved.',
-                )),
-            _Action('Roughness 0.1', Colors.lightBlue.shade100,
+            _Action(
+                'Color blue',
+                Colors.blue,
+                () => _applyOverride(
+                      label: 'Color only blue',
+                      color: const [0.2, 0.4, 1.0, 1.0],
+                      expectation:
+                          'Only color changes. Metallic/roughness from any previous override are preserved (test sticky updates).',
+                    )),
+            _Action(
+                'Metallic 1.0',
+                Colors.grey.shade700,
+                () => _applyOverride(
+                      label: 'Metallic only 1.0',
+                      metallic: 1.0,
+                      expectation:
+                          'Tooth becomes fully metallic. Color from any previous override is preserved.',
+                    )),
+            _Action(
+                'Roughness 0.1',
+                Colors.lightBlue.shade100,
                 () => _applyOverride(
                       label: 'Roughness only 0.1',
                       roughness: 0.1,
                       expectation: 'Surface becomes very shiny / smooth.',
                     )),
-            _Action('Emissive', Colors.orange.shade200, () => _applyOverride(
-                  label: 'Emissive only',
-                  emissive: const [0.6, 0.3, 0.0],
-                  expectation:
-                      'Tooth glows orange even in shadowed areas. Note: emissive replaces any GLB emission map.',
-                )),
+            _Action(
+                'Emissive',
+                Colors.orange.shade200,
+                () => _applyOverride(
+                      label: 'Emissive only',
+                      emissive: const [0.6, 0.3, 0.0],
+                      expectation:
+                          'Tooth glows orange even in shadowed areas. Note: emissive replaces any GLB emission map.',
+                    )),
           ],
         ),
         _ActionSection(
           label: 'Texture',
           actions: [
-            _Action('Teeth tex', Colors.brown.shade400, () => _applyTexture(
-                  assetPath: 'assets/models/textures/teeth_baseColor.png',
-                  label: 'teeth base color',
-                  expectation: 'Tooth shows the teeth base-color image.',
-                )),
-            _Action('Mouth tex', Colors.purple.shade300, () => _applyTexture(
-                  assetPath: 'assets/models/textures/mouth_baseColor.png',
-                  label: 'mouth base color',
-                  expectation: 'Swaps to a different image at runtime.',
-                )),
+            _Action(
+                'Teeth tex',
+                Colors.brown.shade400,
+                () => _applyTexture(
+                      assetPath: 'assets/models/textures/teeth_baseColor.png',
+                      label: 'teeth base color',
+                      expectation: 'Tooth shows the teeth base-color image.',
+                    )),
+            _Action(
+                'Mouth tex',
+                Colors.purple.shade300,
+                () => _applyTexture(
+                      assetPath: 'assets/models/textures/mouth_baseColor.png',
+                      label: 'mouth base color',
+                      expectation: 'Swaps to a different image at runtime.',
+                    )),
             _Action('Reset tex', Colors.brown.shade200, _resetTexture),
           ],
         ),
@@ -400,7 +433,9 @@ class _PbrOverrideTestbedState extends State<PbrOverrideTestbed> {
         _ActionSection(
           label: 'Reload',
           actions: [
-            _Action('Clean', Colors.teal.shade400,
+            _Action(
+                'Clean',
+                Colors.teal.shade400,
                 () => _reload(
                       label: 'Reloaded clean. All overrides cleared.',
                       expectation:
@@ -512,8 +547,7 @@ class _Chip extends StatelessWidget {
           ),
           Text(
             value,
-            style: const TextStyle(
-                fontSize: 11, fontWeight: FontWeight.w600),
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
           ),
         ],
       ),

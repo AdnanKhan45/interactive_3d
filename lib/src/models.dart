@@ -26,11 +26,11 @@ class SequenceConfig {
   });
 
   Map<String, dynamic> toJson() => {
-    'group': group,
-    'order': order,
-    'bidirectional': bidirectional,
-    if (tiedGroup != null) 'tiedGroup': tiedGroup,
-  };
+        'group': group,
+        'order': order,
+        'bidirectional': bidirectional,
+        if (tiedGroup != null) 'tiedGroup': tiedGroup,
+      };
 }
 
 /// Per-entity color override for selection and preselection highlights.
@@ -58,9 +58,9 @@ class ModelPartGroup {
   ModelPartGroup({required this.title, required this.names});
 
   Map<String, dynamic> toMap() => {
-    'title': title,
-    'names': names,
-  };
+        'title': title,
+        'names': names,
+      };
 }
 
 /// Identifies a single entity in the loaded 3D model.

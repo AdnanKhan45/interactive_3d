@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:interactive_3d/interactive_3d.dart';
 import 'result_page.dart';
 
-final Interactive3dController interactive3dController = Interactive3dController();
-
+final Interactive3dController interactive3dController =
+    Interactive3dController();
 
 class GlbLoaderExample extends StatefulWidget {
   const GlbLoaderExample({super.key});
@@ -16,7 +16,6 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
   List<EntityData> _selectedEntities = [];
 
   bool _toothVisibiliy = true;
-
 
   List<String> toothGroup = [
     "Teeth_Lower_1",
@@ -65,7 +64,7 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
                   child: Interactive3d(
                 controller: interactive3dController,
                 enableCache: true,
-                    clearSelectionOnHighlight: true,
+                clearSelectionOnHighlight: true,
                 cacheColor: [0.7, 0.7, 0.2, 0.5],
                 onCacheSelectionChanged: (cachedNames) {
                   print('Cached: $cachedNames');
@@ -85,35 +84,36 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
                 defaultZoom: 2,
                 onSelectionChanged: (selectedEntities) {
                   // Extract only names
-                  print("Selected: ${selectedEntities.map((e) => e.name).toList()}");
+                  print(
+                      "Selected: ${selectedEntities.map((e) => e.name).toList()}");
                   setState(() {
                     _selectedEntities = selectedEntities;
                   });
                 },
-                    selectionSequence: [
-                      SequenceConfig(
-                        group: 'Teeth_Lower',
-                        order: List.generate(16, (i) => 'Teeth_Lower_${i+1}'),
-                        bidirectional: true,
-                      ),
-                      SequenceConfig(
-                        group: 'Teeth_Upper',
-                        order: List.generate(16, (i) => 'Teeth_Upper_${i+1}'),
-                        bidirectional: true,
-                      ),
-                      // SequenceConfig(
-                      //   group: 'teeth',
-                      //   order: List.generate(32, (i) => 'teeth_${i+1}'),
-                      //   bidirectional: true,
-                      //   tiedGroup: 'gum',
-                      // ),
-                      // SequenceConfig(
-                      //   group: 'gum',
-                      //   order: List.generate(32, (i) => 'gum_${i+1}'),
-                      //   bidirectional: true,
-                      //   tiedGroup: 'teeth',
-                      // ),
-                    ],
+                selectionSequence: [
+                  SequenceConfig(
+                    group: 'Teeth_Lower',
+                    order: List.generate(16, (i) => 'Teeth_Lower_${i + 1}'),
+                    bidirectional: true,
+                  ),
+                  SequenceConfig(
+                    group: 'Teeth_Upper',
+                    order: List.generate(16, (i) => 'Teeth_Upper_${i + 1}'),
+                    bidirectional: true,
+                  ),
+                  // SequenceConfig(
+                  //   group: 'teeth',
+                  //   order: List.generate(32, (i) => 'teeth_${i+1}'),
+                  //   bidirectional: true,
+                  //   tiedGroup: 'gum',
+                  // ),
+                  // SequenceConfig(
+                  //   group: 'gum',
+                  //   order: List.generate(32, (i) => 'gum_${i+1}'),
+                  //   bidirectional: true,
+                  //   tiedGroup: 'teeth',
+                  // ),
+                ],
                 patchColors: [
                   PatchColor(
                     name: "Hard_Plate_L",
@@ -191,61 +191,61 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
               ),
             ],
           ),
-           Padding(
-             padding: const EdgeInsets.only(top: 40.0),
-             child: Column(
-               children: [
-                 Row(
-                   children: [
-                     Expanded(
-                       child: Padding(
-                         padding:
-                         const EdgeInsets.symmetric(horizontal: 10.0, vertical: 20),
-                         child: ElevatedButton(
-                           onPressed: _clearSelections,
-                           child: Text("Clear"),
-                         ),
-                       ),
-                     ),
-                     Expanded(
-                       child: Padding(
-                         padding:
-                         const EdgeInsets.symmetric(horizontal: 10.0, vertical: 20),
-                         child: ElevatedButton(
-                           onPressed: _clearCache,
-                           child: Text("Clear Cache"),
-                         ),
-                       ),
-                     ),
-                     Expanded(
-                       child: Padding(
-                         padding:
-                         const EdgeInsets.symmetric(horizontal: 10.0, vertical: 20),
-                         child: ElevatedButton(
-                           onPressed: _refreshCacheHighlight,
-                           child: Text("Refresh Cache"),
-                         ),
-                       ),
-                     ),
-                   ],
-                 ),
-                 Row(
-                   children: [
-                     Expanded(
-                       child: Padding(
-                         padding:
-                         const EdgeInsets.symmetric(horizontal: 10.0, vertical: 20),
-                         child: ElevatedButton(
-                           onPressed: _clearSpecificCache,
-                           child: Text("Clear Specific"),
-                         ),
-                       ),
-                     ),
-                   ],
-                 )
-               ],
-             ),
-           ),
+          Padding(
+            padding: const EdgeInsets.only(top: 40.0),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10.0, vertical: 20),
+                        child: ElevatedButton(
+                          onPressed: _clearSelections,
+                          child: Text("Clear"),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10.0, vertical: 20),
+                        child: ElevatedButton(
+                          onPressed: _clearCache,
+                          child: Text("Clear Cache"),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10.0, vertical: 20),
+                        child: ElevatedButton(
+                          onPressed: _refreshCacheHighlight,
+                          child: Text("Refresh Cache"),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10.0, vertical: 20),
+                        child: ElevatedButton(
+                          onPressed: _clearSpecificCache,
+                          child: Text("Clear Specific"),
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              ],
+            ),
+          ),
           Align(
             alignment: Alignment.topLeft,
             child: Padding(
@@ -256,7 +256,6 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
                 onChanged: (visibility) {
                   setState(
                     () {
-
                       _toothVisibiliy = visibility;
 
                       interactive3dController.updatePartGroupConfig(
