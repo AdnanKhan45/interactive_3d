@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:interactive_3d/interactive_3d.dart';
 
+import '../../shared/demo_assets.dart';
+import '../../shared/demo_scaffold.dart';
+
 /// End-to-end testbed for runtime PBR overrides.
 /// Stays on the clean path: no cache, no patchColors, no preselectedEntities.
 /// The plugin renders. Your app owns the state and persistence.
@@ -27,9 +30,10 @@ class _PbrOverrideTestbedState extends State<PbrOverrideTestbed> {
   bool _useInitialOverrides = false;
   int _modelKey = 0;
 
-  String _lastAction = 'Tap a tooth to begin.';
-  String _expectation =
-      'A tooth name should appear in "Selected" once you tap one.';
+  var _status = const DemoStatus(
+    'Tap a tooth to begin.',
+    'A tooth name should appear in "Selected" once you tap one.',
+  );
 
   // -- Selection ----------------------------------------------------------
 
@@ -191,18 +195,14 @@ class _PbrOverrideTestbedState extends State<PbrOverrideTestbed> {
         _overrides.clear();
         _textures.clear();
       }
-      _lastAction = label;
-      _expectation = expectation;
+      _status = DemoStatus(label, expectation);
     });
   }
 
   // -- Helpers ------------------------------------------------------------
 
   void _setStatus({required String action, required String expectation}) {
-    setState(() {
-      _lastAction = action;
-      _expectation = expectation;
-    });
+    setState(() => _status = DemoStatus(action, expectation));
   }
 
   void _showPersistenceGuide(BuildContext context) {
@@ -258,34 +258,29 @@ class _PbrOverrideTestbedState extends State<PbrOverrideTestbed> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('PBR Override Testbed'),
-        backgroundColor: Colors.teal,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            tooltip: 'How to persist overrides',
-            icon: const Icon(Icons.info_outline),
-            onPressed: () => _showPersistenceGuide(context),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(child: _buildModel()),
-          _StatusPanel(
-            selectedName: _selectedName,
-            overrideCount: _overrides.length,
-            mode: _mode,
-            lastAction: _lastAction,
-            expectation: _expectation,
-          ),
-          _ActionBar(
-            sections: _sections(),
-          ),
-        ],
-      ),
+    return DemoScaffold(
+      title: 'Materials and textures',
+      howTo: 'Runtime PBR overrides and base color textures on the clean '
+          'path: no cache, no patchColors, no preselectedEntities.\n\n'
+          'Tap a tooth, then use the actions. Color tints the GLB texture '
+          'instead of replacing it, partial updates keep earlier values, and '
+          'selection wins visually while active. Reload with +Initial to '
+          'test restoring overrides on load.',
+      appBarActions: [
+        IconButton(
+          tooltip: 'How to persist overrides',
+          icon: const Icon(Icons.save_outlined),
+          onPressed: () => _showPersistenceGuide(context),
+        ),
+      ],
+      viewer: _buildModel(),
+      chips: [
+        ('Selected', _selectedName ?? '-'),
+        ('Overrides', '${_overrides.length}'),
+        ('Mode', _mode),
+      ],
+      status: _status,
+      sections: _sections(),
     );
   }
 
@@ -293,12 +288,12 @@ class _PbrOverrideTestbedState extends State<PbrOverrideTestbed> {
     return Interactive3d(
       key: ValueKey(_modelKey),
       controller: _controller,
-      modelPath: 'assets/models/Tooth-3.glb',
-      iblPath: 'assets/models/giuseppe_bridge_4k_ibl.ktx',
-      skyboxPath: 'assets/models/giuseppe_bridge_4k_skybox.ktx',
-      iOSBackgroundEnvPath: 'assets/models/san_giuseppe_bridge_4k.hdr',
+      modelPath: DemoAssets.toothGlb,
+      iblPath: DemoAssets.bridgeIbl,
+      skyboxPath: DemoAssets.bridgeSkybox,
+      iOSBackgroundEnvPath: DemoAssets.bridgeHdr,
       defaultZoom: 2,
-      selectionColor: const [0.0, 0.6, 1.0, 1.0],
+      selectionColor: DemoAssets.selectionBlue,
       onSelectionChanged: _onSelectionChanged,
       initialMaterialOverrides:
           _useInitialOverrides ? _overrides.values.toList() : null,
@@ -312,352 +307,140 @@ class _PbrOverrideTestbedState extends State<PbrOverrideTestbed> {
 
   // -- Action sections ----------------------------------------------------
 
-  List<_ActionSection> _sections() => [
-        _ActionSection(
-          label: 'Full PBR',
-          actions: [
-            _Action(
-                'Cavity',
-                Colors.red.shade700,
-                () => _applyOverride(
-                      label: 'Cavity (red matte)',
-                      color: const [0.85, 0.15, 0.15, 1.0],
-                      metallic: 0.0,
-                      roughness: 0.9,
-                      expectation:
-                          'Red-tinted tooth, enamel texture still visible. Tap to add blue selection on top, tap again to deselect, override returns.',
-                    )),
-            _Action(
-                'Filling',
-                Colors.amber.shade700,
-                () => _applyOverride(
-                      label: 'Filling (gold metal)',
-                      color: const [0.85, 0.7, 0.2, 1.0],
-                      metallic: 0.9,
-                      roughness: 0.2,
-                      expectation:
-                          'Tooth looks shiny gold. Light should reflect off it.',
-                    )),
-            _Action(
-                'Crown',
-                Colors.grey.shade400,
-                () => _applyOverride(
-                      label: 'Crown (white satin)',
-                      color: const [1.0, 1.0, 1.0, 1.0],
-                      metallic: 0.1,
-                      roughness: 0.4,
-                      expectation: 'Tooth becomes slightly brighter white.',
-                    )),
-            _Action(
-                'Inflamed',
-                Colors.pink.shade300,
-                () => _applyOverride(
-                      label: 'Inflamed (pink)',
-                      color: const [1.0, 0.5, 0.6, 1.0],
-                      metallic: 0.0,
-                      roughness: 0.7,
-                      expectation: 'Pink tint, texture preserved.',
-                    )),
-          ],
-        ),
-        _ActionSection(
-          label: 'Partial',
-          actions: [
-            _Action(
-                'Color blue',
-                Colors.blue,
-                () => _applyOverride(
-                      label: 'Color only blue',
-                      color: const [0.2, 0.4, 1.0, 1.0],
-                      expectation:
-                          'Only color changes. Metallic/roughness from any previous override are preserved (test sticky updates).',
-                    )),
-            _Action(
-                'Metallic 1.0',
-                Colors.grey.shade700,
-                () => _applyOverride(
-                      label: 'Metallic only 1.0',
-                      metallic: 1.0,
-                      expectation:
-                          'Tooth becomes fully metallic. Color from any previous override is preserved.',
-                    )),
-            _Action(
-                'Roughness 0.1',
-                Colors.lightBlue.shade100,
-                () => _applyOverride(
-                      label: 'Roughness only 0.1',
-                      roughness: 0.1,
-                      expectation: 'Surface becomes very shiny / smooth.',
-                    )),
-            _Action(
-                'Emissive',
-                Colors.orange.shade200,
-                () => _applyOverride(
-                      label: 'Emissive only',
-                      emissive: const [0.6, 0.3, 0.0],
-                      expectation:
-                          'Tooth glows orange even in shadowed areas. Note: emissive replaces any GLB emission map.',
-                    )),
-          ],
-        ),
-        _ActionSection(
-          label: 'Texture',
-          actions: [
-            _Action(
-                'Teeth tex',
-                Colors.brown.shade400,
-                () => _applyTexture(
-                      assetPath: 'assets/models/textures/teeth_baseColor.png',
-                      label: 'teeth base color',
-                      expectation: 'Tooth shows the teeth base-color image.',
-                    )),
-            _Action(
-                'Mouth tex',
-                Colors.purple.shade300,
-                () => _applyTexture(
-                      assetPath: 'assets/models/textures/mouth_baseColor.png',
-                      label: 'mouth base color',
-                      expectation: 'Swaps to a different image at runtime.',
-                    )),
-            _Action('Reset tex', Colors.brown.shade200, _resetTexture),
-          ],
-        ),
-        _ActionSection(
-          label: 'Reset',
-          actions: [
-            _Action('Reset selected', Colors.grey.shade600, _resetSelected),
-            _Action('Reset all', Colors.grey.shade800, _resetAll),
-            _Action('Clear sel.', Colors.indigo.shade300, _clearSelection),
-          ],
-        ),
-        _ActionSection(
-          label: 'Reload',
-          actions: [
-            _Action(
-                'Clean',
-                Colors.teal.shade400,
-                () => _reload(
-                      label: 'Reloaded clean. All overrides cleared.',
-                      expectation:
-                          'Fresh model. No overrides, no cache, no sequence. Use this between tests.',
-                    )),
-            _Action('+Initial', Colors.teal.shade600, () {
-              if (_overrides.isEmpty && _textures.isEmpty) {
-                _setStatus(
-                  action: 'No overrides to seed.',
-                  expectation:
-                      'Apply at least one override first, then press +Initial to test persistence on reload.',
-                );
-                return;
-              }
-              _reload(
-                withInitialOverrides: true,
-                label: 'Reloaded with ${_overrides.length} initial overrides.',
+  List<DemoActionSection> _sections() => [
+        DemoActionSection('Full PBR', [
+          DemoAction(
+              'Cavity',
+              Colors.red.shade700,
+              () => _applyOverride(
+                    label: 'Cavity (red matte)',
+                    color: const [0.85, 0.15, 0.15, 1.0],
+                    metallic: 0.0,
+                    roughness: 0.9,
+                    expectation:
+                        'Red-tinted tooth, enamel texture still visible. Tap to add blue selection on top, tap again to deselect, override returns.',
+                  )),
+          DemoAction(
+              'Filling',
+              Colors.amber.shade700,
+              () => _applyOverride(
+                    label: 'Filling (gold metal)',
+                    color: const [0.85, 0.7, 0.2, 1.0],
+                    metallic: 0.9,
+                    roughness: 0.2,
+                    expectation:
+                        'Tooth looks shiny gold. Light should reflect off it.',
+                  )),
+          DemoAction(
+              'Crown',
+              Colors.grey.shade400,
+              () => _applyOverride(
+                    label: 'Crown (white satin)',
+                    color: const [1.0, 1.0, 1.0, 1.0],
+                    metallic: 0.1,
+                    roughness: 0.4,
+                    expectation: 'Tooth becomes slightly brighter white.',
+                  )),
+          DemoAction(
+              'Inflamed',
+              Colors.pink.shade300,
+              () => _applyOverride(
+                    label: 'Inflamed (pink)',
+                    color: const [1.0, 0.5, 0.6, 1.0],
+                    metallic: 0.0,
+                    roughness: 0.7,
+                    expectation: 'Pink tint, texture preserved.',
+                  )),
+        ]),
+        DemoActionSection('Partial', [
+          DemoAction(
+              'Color blue',
+              Colors.blue,
+              () => _applyOverride(
+                    label: 'Color only blue',
+                    color: const [0.2, 0.4, 1.0, 1.0],
+                    expectation:
+                        'Only color changes. Metallic/roughness from any previous override are preserved (test sticky updates).',
+                  )),
+          DemoAction(
+              'Metallic 1.0',
+              Colors.grey.shade700,
+              () => _applyOverride(
+                    label: 'Metallic only 1.0',
+                    metallic: 1.0,
+                    expectation:
+                        'Tooth becomes fully metallic. Color from any previous override is preserved.',
+                  )),
+          DemoAction(
+              'Roughness 0.1',
+              Colors.lightBlue.shade100,
+              () => _applyOverride(
+                    label: 'Roughness only 0.1',
+                    roughness: 0.1,
+                    expectation: 'Surface becomes very shiny / smooth.',
+                  )),
+          DemoAction(
+              'Emissive',
+              Colors.orange.shade200,
+              () => _applyOverride(
+                    label: 'Emissive only',
+                    emissive: const [0.6, 0.3, 0.0],
+                    expectation:
+                        'Tooth glows orange even in shadowed areas. Note: emissive replaces any GLB emission map.',
+                  )),
+        ]),
+        DemoActionSection('Texture', [
+          DemoAction(
+              'Teeth tex',
+              Colors.brown.shade400,
+              () => _applyTexture(
+                    assetPath: DemoAssets.teethTexture,
+                    label: 'teeth base color',
+                    expectation: 'Tooth shows the teeth base-color image.',
+                  )),
+          DemoAction(
+              'Mouth tex',
+              Colors.purple.shade300,
+              () => _applyTexture(
+                    assetPath: DemoAssets.mouthTexture,
+                    label: 'mouth base color',
+                    expectation: 'Swaps to a different image at runtime.',
+                  )),
+          DemoAction('Reset tex', Colors.brown.shade200, _resetTexture),
+        ]),
+        DemoActionSection('Reset', [
+          DemoAction('Reset selected', Colors.grey.shade600, _resetSelected),
+          DemoAction('Reset all', Colors.grey.shade800, _resetAll),
+          DemoAction('Clear sel.', Colors.indigo.shade300, _clearSelection),
+        ]),
+        DemoActionSection('Reload', [
+          DemoAction(
+              'Clean',
+              Colors.teal.shade400,
+              () => _reload(
+                    label: 'Reloaded clean. All overrides cleared.',
+                    expectation:
+                        'Fresh model. No overrides, no cache, no sequence. Use this between tests.',
+                  )),
+          DemoAction('+Initial', Colors.teal.shade600, () {
+            if (_overrides.isEmpty && _textures.isEmpty) {
+              _setStatus(
+                action: 'No overrides to seed.',
                 expectation:
-                    'Previously overridden teeth should appear pre-painted. Tap and deselect to confirm override is the deselect target.',
+                    'Apply at least one override first, then press +Initial to test persistence on reload.',
               );
-            }),
-          ],
-        ),
-        _ActionSection(
-          label: 'Stress',
-          actions: [
-            _Action('Run 50x', Colors.deepOrange.shade400, _stress),
-          ],
-        ),
+              return;
+            }
+            _reload(
+              withInitialOverrides: true,
+              label: 'Reloaded with ${_overrides.length} initial overrides.',
+              expectation:
+                  'Previously overridden teeth should appear pre-painted. Tap and deselect to confirm override is the deselect target.',
+            );
+          }),
+        ]),
+        DemoActionSection('Stress', [
+          DemoAction('Run 50x', Colors.deepOrange.shade400, _stress),
+        ]),
       ];
-}
-
-// ============================================================================
-// UI primitives
-// ============================================================================
-
-class _StatusPanel extends StatelessWidget {
-  final String? selectedName;
-  final int overrideCount;
-  final String mode;
-  final String lastAction;
-  final String expectation;
-
-  const _StatusPanel({
-    required this.selectedName,
-    required this.overrideCount,
-    required this.mode,
-    required this.lastAction,
-    required this.expectation,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        border: Border(top: BorderSide(color: Colors.grey.shade300)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              _Chip('Selected', selectedName ?? '-'),
-              const SizedBox(width: 6),
-              _Chip('Overrides', '$overrideCount'),
-              const SizedBox(width: 6),
-              _Chip('Mode', mode),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Action: $lastAction',
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            'Expect: $expectation',
-            style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  final String label;
-  final String value;
-  const _Chip(this.label, this.value);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            '$label: ',
-            style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
-          ),
-          Text(
-            value,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ActionBar extends StatelessWidget {
-  final List<_ActionSection> sections;
-  const _ActionBar({required this.sections});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 96,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Colors.grey.shade300)),
-      ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        child: Row(
-          children: [
-            for (final section in sections) ...[
-              _Section(section),
-              const SizedBox(width: 8),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Section extends StatelessWidget {
-  final _ActionSection section;
-  const _Section(this.section);
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 4),
-          child: Text(
-            section.label,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              color: Colors.grey.shade600,
-              letterSpacing: 0.5,
-            ),
-          ),
-        ),
-        Row(
-          children: [
-            for (final action in section.actions) ...[
-              _ActionButton(action),
-              const SizedBox(width: 6),
-            ],
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _ActionButton extends StatelessWidget {
-  final _Action action;
-  const _ActionButton(this.action);
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: action.onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        width: 96,
-        height: 52,
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        decoration: BoxDecoration(
-          color: action.color,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          action.label,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ActionSection {
-  final String label;
-  final List<_Action> actions;
-  const _ActionSection({required this.label, required this.actions});
-}
-
-class _Action {
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-  const _Action(this.label, this.color, this.onTap);
 }

@@ -1,198 +1,130 @@
-// main.dart
 import 'package:flutter/material.dart';
-import 'package:interactive_3d_example/glb_loader_example.dart';
-import 'package:interactive_3d_example/memory_test_page.dart';
-import 'package:interactive_3d_example/pbr_override_testbed.dart';
+
+import 'pages/cache/cache_page.dart';
+import 'pages/camera/camera_page.dart';
+import 'pages/diagnostics/memory_test_page.dart';
+import 'pages/getting_started/glb_page.dart';
+import 'pages/getting_started/gltf_page.dart';
+import 'pages/getting_started/url_page.dart';
+import 'pages/materials/patch_colors_page.dart';
+import 'pages/materials/pbr_testbed_page.dart';
+import 'pages/selection/preselect_page.dart';
+import 'pages/selection/selection_page.dart';
+import 'pages/selection/sequence_page.dart';
+import 'pages/visibility/part_groups_page.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const ExampleApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class ExampleApp extends StatelessWidget {
+  const ExampleApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Interactive 3D Plugin',
-      theme: ThemeData(
-        primarySwatch: Colors.deepPurple,
-        useMaterial3: true,
-      ),
+      title: 'interactive_3d examples',
+      theme: ThemeData(colorSchemeSeed: Colors.deepPurple, useMaterial3: true),
       home: const HomePage(),
     );
   }
 }
+
+class _Demo {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final WidgetBuilder builder;
+  const _Demo(this.icon, this.title, this.subtitle, this.builder);
+}
+
+class _DemoGroup {
+  final String title;
+  final List<_Demo> demos;
+  const _DemoGroup(this.title, this.demos);
+}
+
+final _groups = [
+  _DemoGroup('Getting started', [
+    _Demo(Icons.view_in_ar, 'Load a GLB model',
+        'One file from assets, with lighting', (_) => const GlbPage()),
+    _Demo(Icons.folder_open, 'Load a glTF with files',
+        'Separate .bin and texture files', (_) => const GltfPage()),
+    _Demo(Icons.cloud_download_outlined, 'Load from a URL',
+        'Download a model over the network', (_) => const UrlPage()),
+  ]),
+  _DemoGroup('Selection', [
+    _Demo(Icons.touch_app_outlined, 'Tap to select',
+        'Select, unselect by id, clear all', (_) => const SelectionPage()),
+    _Demo(
+        Icons.format_list_numbered,
+        'Selection order',
+        'Only neighbouring parts can be picked next',
+        (_) => const SequencePage()),
+    _Demo(Icons.playlist_add_check, 'Preselected parts',
+        'Select parts by name on load', (_) => const PreselectPage()),
+  ]),
+  _DemoGroup('Cache', [
+    _Demo(Icons.bookmark_border, 'Saved selections',
+        'Selections that come back next time', (_) => const CachePage()),
+  ]),
+  _DemoGroup('Visibility', [
+    _Demo(Icons.layers_outlined, 'Show and hide part groups',
+        'Toggle named groups of parts', (_) => const PartGroupsPage()),
+  ]),
+  _DemoGroup('Materials and textures', [
+    _Demo(
+        Icons.palette_outlined,
+        'Materials and textures',
+        'Runtime color, PBR, and texture overrides',
+        (_) => const PbrOverrideTestbed()),
+    _Demo(Icons.format_color_fill, 'Per-part selection colors',
+        'patchColors for specific parts', (_) => const PatchColorsPage()),
+  ]),
+  _DemoGroup('Camera', [
+    _Demo(Icons.zoom_in, 'Camera', 'Default zoom and zoom from code',
+        (_) => const CameraPage()),
+  ]),
+  _DemoGroup('Diagnostics', [
+    _Demo(Icons.memory, 'Memory test', 'Open and close the viewer repeatedly',
+        (_) => const MemoryTestPage()),
+  ]),
+];
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Interactive 3D Examples'),
-        backgroundColor: Colors.deepPurple,
-        foregroundColor: Colors.white,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Header Card
-            Card(
-              color: Colors.deepPurple.shade50,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Welcome to Interactive 3D Plugin',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.deepPurple.shade900,
-                          ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Choose an example below to test the plugin functionality.',
-                      style: TextStyle(fontSize: 14),
-                    ),
-                  ],
+      appBar: AppBar(title: const Text('interactive_3d examples')),
+      body: ListView(
+        padding: const EdgeInsets.only(bottom: 24),
+        children: [
+          for (final group in _groups) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 6),
+              child: Text(
+                group.title.toUpperCase(),
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
                 ),
               ),
             ),
-            const SizedBox(height: 24),
-
-            // Memory Test Button
-            _ExampleButton(
-              icon: Icons.memory,
-              title: 'Memory Leak Test',
-              description:
-                  'Test memory management by navigating back and forth',
-              color: Colors.red,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const MemoryTestPage(),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 12),
-
-            // GLB Example Button
-            _ExampleButton(
-              icon: Icons.view_in_ar,
-              title: 'GLB Model Example',
-              description: 'Full-featured example with all capabilities',
-              color: Colors.deepPurple,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const GlbLoaderExample(),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 12),
-
-            // PBR Override Testbed Button
-            _ExampleButton(
-              icon: Icons.science,
-              title: 'PBR Override Testbed',
-              description: 'End-to-end test page for runtime PBR overrides',
-              color: Colors.teal,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const PbrOverrideTestbed(),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 24),
+            for (final demo in group.demos)
+              ListTile(
+                leading: Icon(demo.icon, color: theme.colorScheme.primary),
+                title: Text(demo.title),
+                subtitle: Text(demo.subtitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context)
+                    .push(MaterialPageRoute(builder: demo.builder)),
+              ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ExampleButton extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String description;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _ExampleButton({
-    required this.icon,
-    required this.title,
-    required this.description,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  icon,
-                  color: color,
-                  size: 32,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      description,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                Icons.arrow_forward_ios,
-                color: Colors.grey.shade400,
-                size: 20,
-              ),
-            ],
-          ),
-        ),
+        ],
       ),
     );
   }
