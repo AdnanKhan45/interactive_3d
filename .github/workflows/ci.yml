@@ -31,6 +31,8 @@ jobs:
             check_format: false
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: subosito/flutter-action@v2
         with:
@@ -46,7 +48,12 @@ jobs:
       # Formatter output can shift between SDK releases, so it is enforced on the pinned version only.
       - name: Check formatting
         if: matrix.check_format
-        run: dart format --output=none --set-exit-if-changed $(ls -d lib test example/lib example/test example/integration_test 2>/dev/null)
+        run: |
+          paths=()
+          for d in lib test example/lib example/test example/integration_test; do
+            if [ -d "$d" ]; then paths+=("$d"); fi
+          done
+          dart format --output=none --set-exit-if-changed "${paths[@]}"
 
       - name: Analyze
         run: flutter analyze
@@ -64,6 +71,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-java@v6
         with:
@@ -84,6 +93,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: subosito/flutter-action@v2
         with:
