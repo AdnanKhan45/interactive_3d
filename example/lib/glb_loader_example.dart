@@ -67,7 +67,7 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
                 clearSelectionOnHighlight: true,
                 cacheColor: [0.7, 0.7, 0.2, 0.5],
                 onCacheSelectionChanged: (cachedNames) {
-                  print('Cached: $cachedNames');
+                  debugPrint('Cached: $cachedNames');
                 },
                 modelPath: 'assets/models/Tooth-3.glb',
                 iblPath: 'assets/models/giuseppe_bridge_4k_ibl.ktx',
@@ -84,7 +84,7 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
                 defaultZoom: 2,
                 onSelectionChanged: (selectedEntities) {
                   // Extract only names
-                  print(
+                  debugPrint(
                       "Selected: ${selectedEntities.map((e) => e.name).toList()}");
                   setState(() {
                     _selectedEntities = selectedEntities;
@@ -277,7 +277,7 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
     try {
       await interactive3dController.removeFromCache(["Teeth_Lower_1", "Neck"]);
     } catch (e) {
-      print('Error clearing specific cache: $e');
+      debugPrint('Error clearing specific cache: $e');
     }
   }
 
@@ -288,7 +288,7 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
         _selectedEntities.clear();
       });
     } catch (e) {
-      print('Error clearing selections: $e');
+      debugPrint('Error clearing selections: $e');
     }
   }
 
@@ -296,7 +296,7 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
     try {
       await interactive3dController.clearCache();
     } catch (e) {
-      print('Error clearing selections: $e');
+      debugPrint('Error clearing selections: $e');
     }
   }
 
@@ -304,22 +304,11 @@ class GlbLoaderExampleState extends State<GlbLoaderExample> {
     try {
       await interactive3dController.refreshCacheHighlights();
     } catch (e) {
-      print('Error clearing selections: $e');
+      debugPrint('Error clearing selections: $e');
     }
   }
 
   // TO REMOVE SPECIFIC ENTITY SELECTION
-  void _removeEntity(int entityId) async {
-    try {
-      await interactive3dController.unselectEntities(entityIds: [entityId]);
-      setState(() {
-        _selectedEntities.removeWhere((entity) => entity.id == entityId);
-      });
-    } catch (e) {
-      print('Error unselecting entity: $e');
-    }
-  }
-
   @override
   void dispose() {
     super.dispose();
