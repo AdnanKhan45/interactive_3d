@@ -309,6 +309,8 @@ class FilamentRenderer(
             selection.highlightCachedEntities(asset, eng)
             selection.notifyCacheChanged()
         }
+
+        requestRender()
     }
 
     fun setEntityMaterials(overrides: List<Map<String, Any>>) {
@@ -360,6 +362,7 @@ class FilamentRenderer(
 
         // Selection manager needs to know IBL state for correct reset behavior
         selection.iblLoaded = true
+        requestRender()
     }
 
     fun setBackgroundColor(color: List<Double>) {
@@ -438,6 +441,7 @@ class FilamentRenderer(
             cameraController.applyProjection(it, width, height)
             cameraController.applyToCamera(it)
         }
+        requestRender()
     }
 
     fun setPartGroupVisibility(group: Map<String, Any>, isVisible: Boolean) {
