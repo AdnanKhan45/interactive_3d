@@ -124,11 +124,11 @@ class Interactive3dTextureEntry(
         pendingLoadResult = result
 
         mainHandler.post {
-            val renderer = ensureRenderer()
-                ?: return@post replyLoad {
-                    it.error("RENDERER_UNAVAILABLE", "Rendering surface is not ready", null)
-                }
             try {
+                val renderer = ensureRenderer()
+                    ?: return@post replyLoad {
+                        it.error("RENDERER_UNAVAILABLE", "Rendering surface is not ready", null)
+                    }
                 if (backgroundColor != null) renderer.setBackgroundColor(backgroundColor)
                 val loaded = renderer.loadModel(
                     buffer, fileName, resources, preselectedEntities,
@@ -150,7 +150,12 @@ class Interactive3dTextureEntry(
     fun loadEnvironment(iblBuffer: ByteBuffer, skyboxBuffer: ByteBuffer) =
         mainHandler.post {
             try {
-                ensureRenderer()?.loadEnvironment(iblBuffer, skyboxBuffer)
+                val renderer = ensureRenderer()
+                if (renderer == null) {
+                    Log.w(TAG, "Environment skipped: renderer not ready")
+                    return@post
+                }
+                renderer.loadEnvironment(iblBuffer, skyboxBuffer)
             } catch (e: Exception) {
                 Log.e(TAG, "Error loading environment: ${e.message}", e)
             }
