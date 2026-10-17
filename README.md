@@ -21,14 +21,14 @@
 
 ## Demo
 
-Android and iOS:
-
-<p float="left">
-  <img src="https://media.giphy.com/media/LpzldzEwdglpoRJnrU/giphy.gif" width=200 />
-  <img src="https://media.giphy.com/media/nK7JDBH330RSaqi5y6/giphy.gif" width=200 />
-  <img src="https://media.giphy.com/media/YTh9FdZIaIqZd6KXR6/giphy.gif" width=200 />
-  <img src="https://media.giphy.com/media/aGAkEIzub789i3JVp1/giphy.gif" width=200 />
-</p>
+<table>
+  <tr>
+    <td align="center"><img src="doc/media/selection_ios.gif" width="220" alt="Tapping parts to select them on iOS" /><br /><sub>Tap to select (iOS)</sub></td>
+    <td align="center"><img src="doc/media/materials_android.gif" width="220" alt="Runtime material overrides on Android" /><br /><sub>Runtime materials (Android)</sub></td>
+    <td align="center"><img src="doc/media/camera_ios.gif" width="220" alt="Zoom and reset buttons on iOS" /><br /><sub>Camera controls (iOS)</sub></td>
+    <td align="center"><img src="doc/media/loading_android.gif" width="220" alt="Loading overlay, error view, and retry on Android" /><br /><sub>Loading and errors (Android)</sub></td>
+  </tr>
+</table>
 
 ## Contents
 
@@ -37,11 +37,15 @@ Android and iOS:
 - [Installation](#installation)
 - [Quick start](#quick-start)
 - [Loading models](#loading-models)
-- [Generate IBL and skybox](#generate-ibl-and-skybox)
-- [Runtime PBR material overrides](#runtime-pbr-material-overrides)
-- [Runtime base color textures](#runtime-base-color-textures)
-- [Loading and errors](#loading-and-errors)
+- [Lighting and background](#lighting-and-background)
+- [Selection](#selection)
+- [Selection rules](#selection-rules)
+- [Saved selections](#saved-selections)
+- [Part visibility](#part-visibility)
+- [Materials and textures](#materials-and-textures)
 - [Camera controls](#camera-controls)
+- [Loading and errors](#loading-and-errors)
+- [Example app](#example-app)
 - [Contributing](#contributing)
 - [Maintainer](#maintainer)
 
@@ -49,25 +53,21 @@ Android and iOS:
 
 **Rendering**
 - Load `.glb` and `.gltf` models from assets or a network URL.
-- Image-based lighting (IBL) and skybox from `.ktx` files.
-- Solid background color that skips the skybox while keeping IBL lighting quality.
+- Image-based lighting and skybox from `.ktx` files (Android), HDR background (iOS), or a solid color.
 - A loading widget that stays up until the model is drawn, an error widget, and load callbacks.
 
 **Interaction**
-- Rotate, pan, and tap gestures out of the box.
-- Tap parts (named entities) to select them, and read the selection back in your app.
-- Preselect parts by name and give them custom highlight colors.
-- Toggle visibility of part groups.
+- Drag to rotate, pinch to zoom, tap to select.
+- Read the selected parts (named nodes) back in your app, preselect parts by name, and give parts their own highlight color.
+- Ordered selection rules, saved selections that survive app restarts, and show or hide groups of parts.
 - Camera controls for your own buttons: reset the view, zoom in and out by a step, or jump to a zoom level. The same zoom value looks the same on Android and iOS.
-- Persistent selection cache with a configurable cache color.
-- Ordered selection rules with bidirectional and tied-group support.
 
 **Materials and runtime styling**
 - Runtime PBR overrides: change color, metallic, roughness, and emissive per part, independent of selection.
 - Runtime base color textures: upload a PNG or JPEG onto any part from bytes, with no GLB rebuild.
 
-**Performance**
-- Device-adaptive quality on Android (MSAA, supersampling, and render-quality auto-tuning).
+**Performance (Android)**
+- Device-adaptive quality: MSAA, supersampling, and render-quality auto-tuning.
 - Adaptive frame pacing that saves battery while the model is idle.
 
 ## Platform support
@@ -75,9 +75,18 @@ Android and iOS:
 | Platform | Minimum | Render engine |
 | --- | --- | --- |
 | Android | API 24 | Google Filament (Texture API) |
-| iOS | 12.0 | SceneKit + GLTFSceneKit |
+| iOS | Set by your Flutter version: iOS 13 on Flutter 3.44, iOS 15 on Flutter 3.47 and later | SceneKit + GLTFSceneKit |
 
-Requires Flutter `>= 3.44.0` and Dart `>= 3.6.0`.
+Requires Flutter `>= 3.44.0`.
+
+**What differs between Android and iOS**
+
+| | Android | iOS |
+| --- | --- | --- |
+| Lighting | `iblPath` / `skyboxPath` (`.ktx`) | `iOSBackgroundEnvPath` (HDR/EXR background) |
+| Default selection color | Green | Red. Set `selectionColor` to match both. |
+| Starting view without `defaultZoom` | Zoom 1.0 framing | SceneKit's own framing |
+| Pinch range | 0.5 to 3.0 | Not limited |
 
 ## Installation
 
@@ -85,59 +94,84 @@ Requires Flutter `>= 3.44.0` and Dart `>= 3.6.0`.
 flutter pub add interactive_3d
 ```
 
-Then import it:
+Declare your model folder in your app's `pubspec.yaml`. Flutter asset folders are not recursive, so list every sub-folder you use:
 
-```dart
-import 'package:interactive_3d/interactive_3d.dart';
+```yaml
+flutter:
+  assets:
+    - assets/models/
+    - assets/models/textures/ # only if a .gltf model uses separate textures
 ```
 
 ## Quick start
 
-Drop in a `.glb` model and a lighting environment, and you have an interactive 3D view:
+A complete screen: the model, the name of the tapped part in the app bar, and a button that resets the camera.
 
 ```dart
-Interactive3d(
-  modelPath: 'assets/models/heart.glb',
-  iblPath: 'assets/models/venetian_crossroads_2k_ibl.ktx',
-  skyboxPath: 'assets/models/venetian_crossroads_2k_skybox.ktx',
-  onSelectionChanged: (selectedEntities) {
-    // selectedEntities is a List<EntityData> of the parts the user tapped.
-  },
-)
+import 'package:flutter/material.dart';
+import 'package:interactive_3d/interactive_3d.dart';
+
+class ModelScreen extends StatefulWidget {
+  const ModelScreen({super.key});
+
+  @override
+  State<ModelScreen> createState() => _ModelScreenState();
+}
+
+class _ModelScreenState extends State<ModelScreen> {
+  final _controller = Interactive3dController();
+  String _selected = 'Tap a part';
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(_selected)),
+      // The viewer needs a bounded size; here it fills the body.
+      body: Interactive3d(
+        controller: _controller,
+        modelPath: 'assets/models/heart.glb',
+        defaultZoom: 2,
+        selectionColor: const [0.0, 0.6, 1.0, 1.0],
+        onSelectionChanged: (parts) => setState(() {
+          _selected = parts.isEmpty
+              ? 'Tap a part'
+              : parts.map((part) => part.name).join(', ');
+        }),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _controller.resetCamera,
+        child: const Icon(Icons.center_focus_strong),
+      ),
+    );
+  }
+}
 ```
 
-Add your model files under `assets/models` and declare them in `pubspec.yaml`. A `.glb` model is self-contained. A `.gltf` model needs its companion `.bin` file in the same folder, and any textures placed in a sub-folder such as `assets/models/textures`, listed via the `resources` parameter (keep the `.bin` first in that list). See the example app for a complete asset layout.
+Lighting files are optional. Without them, both platforms add default lights.
 
 ## Loading models
 
 <details open>
-<summary><b>From a .gltf model</b></summary>
+<summary><b>From a .glb model</b></summary>
+
+A `.glb` is self-contained:
 
 ```dart
 Interactive3d(
-  // Solid background skips the skybox but keeps IBL lighting.
-  solidBackgroundColor: [0.92, 0.92, 0.92, 1.0],
+  modelPath: 'assets/models/heart.glb',
+)
+```
+
+</details>
+
+<details>
+<summary><b>From a .gltf model with separate files</b></summary>
+
+A `.gltf` keeps its geometry (`.bin`) and textures in separate files. List them in `resources`, as paths relative to the `.gltf` file, exactly as the `.gltf` references them:
+
+```dart
+Interactive3d(
   modelPath: 'assets/models/Tooth-2.gltf',
-  // IBL and skybox are the background environments.
-  iblPath: 'assets/models/venetian_crossroads_2k_ibl.ktx',
-  skyboxPath: 'assets/models/venetian_crossroads_2k_skybox.ktx',
-  // iOS background environment from an HDR file.
-  iOSBackgroundEnvPath: 'assets/models/san_giuseppe_bridge_4k.hdr',
-  // Preselect parts by entity name.
-  preselectedEntities: ["Teeth_1", "Teeth_2", "Lower_Jaw"],
-  // Selection color (RGBA), default is green.
-  selectionColor: [1.0, 0.0, 0.0, 1.0],
-  // Default zoom, default is 1.0.
-  defaultZoom: 1.5,
-  // Custom color for a specific selected or preselected part.
-  patchColors: [
-    PatchColor(
-      name: "Hard_Plate_L",
-      color: [0.41, 0.35, 0.51, 1.0],
-    ),
-    // ...
-  ],
-  // glTF companion files. Keep the .bin first.
   resources: [
     'scene.bin',
     'textures/mouth_baseColor.png',
@@ -147,45 +181,10 @@ Interactive3d(
     'textures/teeth_metallicRoughness.png',
     'textures/teeth_normal.png',
   ],
-  onSelectionChanged: (selectedEntities) {
-    setState(() {
-      _selectedEntities = selectedEntities;
-    });
-  },
 )
 ```
 
-</details>
-
-<details>
-<summary><b>From a .glb model</b></summary>
-
-A `.glb` is self-contained, so `resources` is not needed:
-
-```dart
-Interactive3d(
-  solidBackgroundColor: [0.92, 0.92, 0.92, 1.0],
-  modelPath: 'assets/models/heart.glb',
-  iblPath: 'assets/models/venetian_crossroads_2k_ibl.ktx',
-  skyboxPath: 'assets/models/venetian_crossroads_2k_skybox.ktx',
-  iOSBackgroundEnvPath: 'assets/models/san_giuseppe_bridge_4k.hdr',
-  preselectedEntities: ["Chamber", "Artery"],
-  selectionColor: [1.0, 0.0, 0.0, 1.0],
-  defaultZoom: 1.5,
-  patchColors: [
-    PatchColor(
-      name: "Hard_Plate_L",
-      color: [0.41, 0.35, 0.51, 1.0],
-    ),
-    // ...
-  ],
-  onSelectionChanged: (selectedEntities) {
-    setState(() {
-      _selectedEntities = selectedEntities;
-    });
-  },
-)
-```
+A missing resource does not fail the load: it is logged, and the model shows without it.
 
 </details>
 
@@ -195,101 +194,176 @@ Interactive3d(
 ```dart
 Interactive3d(
   modelUrl: 'https://modelviewer.dev/shared-assets/models/Astronaut.glb',
-  iblUrl: 'https://example/your_ibl.ktx',
-  skyboxUrl: 'https://example/your_skybox.ktx',
+)
+```
+
+For a `.gltf` URL, `resources` are downloaded relative to the model URL.
+
+</details>
+
+## Lighting and background
+
+**Android** uses image-based lighting (IBL) and a skybox from two `.ktx` files. Pass both, from assets or URLs:
+
+```dart
+Interactive3d(
+  modelPath: 'assets/models/heart.glb',
+  iblPath: 'assets/models/venetian_crossroads_2k_ibl.ktx',
+  skyboxPath: 'assets/models/venetian_crossroads_2k_skybox.ktx',
+  // iblUrl / skyboxUrl load them from the network instead.
+)
+```
+
+**iOS** shows an HDR or EXR image as the background, with neutral lights:
+
+```dart
+Interactive3d(
+  modelPath: 'assets/models/heart.glb',
   iOSBackgroundEnvPath: 'assets/models/san_giuseppe_bridge_4k.hdr',
-  preselectedEntities: ["Chamber", "Artery"],
-  selectionColor: [1.0, 0.0, 0.0, 1.0],
-  defaultZoom: 1.5,
+  // or iOSBackgroundEnvUrl
+)
+```
+
+Pass both sets in the same widget to cover both platforms. Each platform ignores the other's files.
+
+**Solid background:** `solidBackgroundColor: [0.92, 0.92, 0.92, 1.0]` replaces the background on both platforms. On Android the IBL lighting still applies, as long as both `.ktx` files are passed.
+
+<details>
+<summary><b>Generate the IBL and skybox files</b></summary>
+
+Filament's `cmgen` tool turns an HDR image into both files.
+
+1. Get an equirectangular `.hdr` image, for example from [Poly Haven](https://polyhaven.com/).
+2. Download the Filament release that matches the plugin (1.68.1) for your OS from [Filament releases](https://github.com/google/filament/releases/tag/v1.68.1), and add its `bin` folder to your `PATH`.
+3. Run `cmgen`. The `--deploy` folder name becomes the file name:
+
+```bash
+cmgen --format=ktx --size=256 --extract-blur=0.1 --deploy=san_giuseppe_bridge_4k san_giuseppe_bridge_4k.hdr
+```
+
+This writes `san_giuseppe_bridge_4k/san_giuseppe_bridge_4k_ibl.ktx` (pass it as `iblPath`) and `san_giuseppe_bridge_4k/san_giuseppe_bridge_4k_skybox.ktx` (pass it as `skyboxPath`).
+
+</details>
+
+## Selection
+
+Tapping a named part selects it, and tapping it again deselects it. `onSelectionChanged` reports the full selection after every change:
+
+```dart
+Interactive3d(
+  modelPath: 'assets/models/Tooth-3.glb',
+  selectionColor: [0.0, 0.6, 1.0, 1.0], // RGBA
+  preselectedEntities: ['Teeth_Lower_1', 'Teeth_Lower_2'],
   patchColors: [
-    PatchColor(
-      name: "Hard_Plate_L",
-      color: [0.41, 0.35, 0.51, 1.0],
-    ),
-    // ...
+    // A different highlight color for specific parts.
+    PatchColor(name: 'Lower_Jaw_L', color: [1.0, 0.5, 0.0, 1.0]),
   ],
-  onSelectionChanged: (selectedEntities) {
-    setState(() {
-      _selectedEntities = selectedEntities;
-    });
+  onSelectionChanged: (List<EntityData> parts) {
+    // Each EntityData has an id and the node name.
   },
 )
 ```
 
-</details>
+Use `name` to identify parts. The `id` is platform-specific and can change between sessions.
 
-See the example app for complete, runnable usage.
-
-## Generate IBL and skybox
-
-IBL captures the lighting environment from an HDR image, providing indirect lighting for reflections and ambient light. The skybox defines the scene background, simulating the surrounding environment.
-
-1. Get a high-quality HDR image from [Poly Haven](https://polyhaven.com/) or a similar source.
-2. Download the latest Filament build for your OS from the [Filament releases](https://github.com/google/filament/releases), and add its `bin` directory to your shell `PATH` so you can run `cmgen` directly. `cmgen` is Filament's command-line tool for generating IBL data and skybox textures from HDR images.
-3. Generate the `.ktx` files:
-
-```bash
-cmgen --format=ktx --deploy=output_file_name output_directory
-```
-
-For example:
-
-```bash
-cmgen --format=ktx --deploy=san_guiseppe ~/Downloads/san_giuseppe_bridge_4k.hdr
-```
-
-## Runtime PBR material overrides
-
-> Added in v2.1.0
-
-Change color, metallic, roughness, or emissive on any part at runtime, independent of the selection system. GLB textures are preserved: the color tints them rather than replacing them.
+From the controller:
 
 ```dart
-final controller = Interactive3dController();
-
-Interactive3d(
-  controller: controller,
-  modelPath: 'assets/models/Tooth-3.glb',
-  iblPath: 'assets/models/giuseppe_bridge_4k_ibl.ktx',
-  skyboxPath: 'assets/models/giuseppe_bridge_4k_skybox.ktx',
-)
-
-// Apply at runtime (for example, from a button tap):
-await controller.setEntityMaterial(
-  name: 'Tooth_7',
-  color: [0.85, 0.15, 0.15, 1.0], // RGBA, tints the GLB texture red
-  metallic: 0.0,
-  roughness: 0.9,
-);
-
-// Restore one part to its GLB original:
-await controller.resetEntityMaterial('Tooth_7');
-
-// Or reset every override at once:
-await controller.resetAllMaterialOverrides();
+await controller.unselectEntities(entityIds: [part.id]); // specific parts
+await controller.clearSelections(); // everything
 ```
 
-Apply overrides on model load by passing them to the widget. Useful when restoring state on app reopen:
+## Selection rules
+
+`selectionSequence` limits which part can be selected next, for example teeth in order along a jaw:
+
+```dart
+Interactive3d(
+  modelPath: 'assets/models/Tooth-3.glb',
+  selectionSequence: [
+    SequenceConfig(
+      group: 'Teeth_Lower',
+      order: List.generate(16, (i) => 'Teeth_Lower_${i + 1}'),
+      bidirectional: true, // neighbours on either side are allowed
+    ),
+  ],
+)
+```
+
+- The first part in a group can be any part.
+- After that, only a neighbour of an already selected part is accepted. Other taps are ignored.
+- Deselecting is always allowed, and parts outside every group are never restricted.
+- `tiedGroup` pairs two groups of the same length: once the tied group has started, this group can only start at a part whose position is already selected there.
+
+## Saved selections
+
+With `enableCache`, every part the user selects is saved on the device for that model file, and shown in `cacheColor` the next time the model opens:
+
+```dart
+Interactive3d(
+  modelPath: 'assets/models/Tooth-3.glb',
+  enableCache: true,
+  cacheColor: [0.8, 0.8, 0.2, 0.6],
+  clearSelectionOnHighlight: true, // clear selections when cache highlights refresh
+  onCacheSelectionChanged: (List<String> names) {},
+)
+```
+
+Tapping a saved part removes it from the cache and selects it normally. From the controller:
+
+```dart
+await controller.refreshCacheHighlights();
+await controller.removeFromCache(['Teeth_Lower_1']);
+await controller.clearCache();
+```
+
+## Part visibility
+
+Show or hide a named group of parts in one call, for example to hide the jaw and see the teeth roots:
+
+```dart
+final jaws = ModelPartGroup(
+  title: 'Jaws',
+  names: ['Lower_Jaw_L', 'Lower_Jaw_R', 'Upper_Jaw_L', 'Upper_Jaw_R'],
+);
+
+await controller.updatePartGroupConfig(isVisible: false, group: jaws);
+```
+
+## Materials and textures
+
+### Runtime PBR material overrides
+
+Change color, metallic, roughness, or emissive on any part at runtime, independent of selection. GLB textures are preserved: the color tints them rather than replacing them.
+
+```dart
+await controller.setEntityMaterial(
+  name: 'Teeth_Upper_8',
+  color: [0.85, 0.15, 0.15, 1.0], // RGBA
+  metallic: 0.0,
+  roughness: 0.9,
+  emissive: [0.6, 0.3, 0.0], // RGB, above 1.0 for a stronger glow
+);
+
+await controller.resetEntityMaterial('Teeth_Upper_8'); // one part
+await controller.resetAllMaterialOverrides(); // every part
+```
+
+Successive calls on the same part merge: pass only the fields you want to change. `setEntityMaterials` applies a list of `MaterialOverride`s in one call, and `initialMaterialOverrides` applies them when the model loads:
 
 ```dart
 Interactive3d(
   modelPath: 'assets/models/Tooth-3.glb',
   initialMaterialOverrides: [
-    MaterialOverride(name: 'Tooth_3', color: [0.85, 0.15, 0.15, 1.0]),
-    MaterialOverride(name: 'Tooth_7', metallic: 0.9, roughness: 0.2),
+    MaterialOverride(name: 'Teeth_Upper_8', color: [0.85, 0.15, 0.15, 1.0]),
+    MaterialOverride(name: 'Teeth_Upper_9', metallic: 0.9, roughness: 0.2),
   ],
 )
 ```
 
-Successive calls on the same part merge: pass only the fields you want to change, and the rest keep their value. Selection still wins visually while active, and deselecting restores the override.
+### Runtime base color textures
 
-Overrides are not persisted by the plugin. Store them in your own state layer (SharedPreferences, Hive, SQLite, or a remote database) and pass them back via `initialMaterialOverrides` when you build the widget.
-
-## Runtime base color textures
-
-> Added in v2.2.0
-
-Upload a PNG or JPEG onto any part at runtime as its base color texture, with no GLB rebuild. Pass the encoded bytes, and the plugin decodes them natively. An active color override tints the uploaded texture, the same way it tints a GLB texture.
+Upload a PNG or JPEG onto any part as its base color texture, with no GLB rebuild. An active color override tints it.
 
 <p align="center">
   <img src="doc/media/texture_android.png" width="250" alt="Runtime texture on Android (Filament)" />
@@ -302,66 +376,32 @@ import 'package:flutter/services.dart' show rootBundle;
 
 final bytes = (await rootBundle.load('assets/textures/wood.png')).buffer.asUint8List();
 
-// Apply at runtime (for example, from a swatch tap):
-await controller.setEntityTexture(name: 'Tooth_7', bytes: bytes);
-
-// Remove the texture, keeping any color/metallic/roughness override:
-await controller.resetEntityTexture('Tooth_7');
-
-// Or remove every uploaded texture at once:
+await controller.setEntityTexture(name: 'Teeth_Upper_8', bytes: bytes);
+await controller.resetEntityTexture('Teeth_Upper_8'); // keeps color overrides
 await controller.resetAllEntityTextures();
 ```
 
-Apply textures on model load by passing them to the widget, the same way as overrides:
+`setEntityTextures` applies several at once, and `initialEntityTextures` applies them when the model loads. The part's mesh needs UV coordinates. Images are treated as sRGB and downsampled to 2048px on the longest side.
 
-```dart
-Interactive3d(
-  modelPath: 'assets/models/Tooth-3.glb',
-  initialEntityTextures: [
-    EntityTexture(name: 'Tooth_7', bytes: woodBytes),
-  ],
-)
-```
+### How styles stack
 
-The texture merges into the same per-part override as color and PBR factors: setting a color after a texture keeps the texture, and the reverse holds too. Selection still wins visually while active, and the texture returns on deselect. `resetEntityMaterial` clears everything on the part, including the texture.
+- Selection wins visually while a part is selected. Deselecting shows the override or texture again.
+- An override or texture wins over the saved-selection color. `resetEntityMaterial` brings the saved color back.
+- `resetEntityMaterial` clears everything on the part, including its texture.
 
-Two things to know:
-
-- The part's mesh must have UV coordinates. A part authored without UVs has nowhere to map the image.
-- Base color images are treated as sRGB, and images larger than 2048px on the longest side are downsampled to bound GPU memory.
-
-Like overrides, textures are not persisted by the plugin. Re-apply them from your own state layer after the model loads.
-
-## Loading and errors
-
-> Added in v2.3.0
-
-`loadingWidget` covers the view until the model is drawn, on both platforms. If loading fails, `errorBuilder` replaces it. Both are optional: without them you get a spinner while loading and an empty view on failure.
-
-```dart
-Interactive3d(
-  key: ValueKey(attempt), // change the key to retry
-  modelUrl: 'https://example.com/models/heart.glb',
-  loadingWidget: const MyBrandedSpinner(),
-  errorBuilder: (context, error) => MyErrorView(
-    onRetry: () => setState(() => attempt++),
-  ),
-  onModelLoaded: () => debugPrint('Model ready'),
-  onModelLoadError: (error, stackTrace) => reportError(error, stackTrace),
-)
-```
-
-`onModelLoaded` fires once, after the model is drawn and its `defaultZoom` is applied, so it is a safe place to drive the camera or apply overrides. A failed lighting download does not fail the load, and lighting gets up to 10 seconds before the overlay lifts. `onModelLoadError` receives the underlying error, for example a `PlatformException` or an HTTP failure.
+Overrides and textures are not saved by the plugin. Keep them in your own state (SharedPreferences, Hive, SQLite, or a server) and pass them back through `initialMaterialOverrides` and `initialEntityTextures`.
 
 ## Camera controls
 
-> Added in v2.3.0
+<p align="center">
+  <img src="doc/media/camera_android.gif" width="220" alt="Zoom and reset buttons on Android" />
+  <img src="doc/media/camera_ios.gif" width="220" alt="Zoom and reset buttons on iOS" />
+</p>
+<p align="center"><em>Zoom steps, rotate, and reset. Android (left) and iOS (right).</em></p>
 
-The plugin ships no camera buttons. Build your own and call the controller:
+The plugin ships no camera buttons. Place your own anywhere and call the controller:
 
 ```dart
-final controller = Interactive3dController();
-
 Interactive3d(
   controller: controller,
   modelPath: 'assets/models/heart.glb',
@@ -379,7 +419,47 @@ await controller.resetCamera();
 await controller.setCameraZoomLevel(2.0);
 ```
 
-Zoom values above 1.0 zoom in and values below zoom out. `zoomBy` keeps the result within 0.5 to 3.0, the same range as pinching on Android. If a pinch or `setCameraZoomLevel` already went past that range, `zoomBy` never moves against the step: zoom-in holds and zoom-out steps back toward the range. The same value frames the model the same way on Android and iOS. On iOS, when `defaultZoom` is not set, the model keeps the platform's own starting view, and `resetCamera` returns to it.
+Zoom values above 1.0 zoom in and values below zoom out, and the same value frames the model the same way on both platforms. `zoomBy` stays within 0.5 to 3.0. If a pinch or `setCameraZoomLevel` already went past that range, `zoomBy` never moves against the step. On iOS, when `defaultZoom` is not set, the model keeps SceneKit's own starting view and `resetCamera` returns to it.
+
+## Loading and errors
+
+<p align="center">
+  <img src="doc/media/loading_android.gif" width="220" alt="Loading overlay, error view, and retry" />
+</p>
+
+`loadingWidget` covers the view until the model is drawn. If loading fails, `errorBuilder` replaces it. Without them you get a spinner while loading and an empty view on failure. Both sit on `backgroundColor`, which defaults to black.
+
+```dart
+Interactive3d(
+  key: ValueKey(attempt), // a new key retries the load
+  modelUrl: 'https://example.com/models/heart.glb',
+  backgroundColor: Colors.white,
+  loadingWidget: const MyBrandedSpinner(),
+  errorBuilder: (context, error) => MyErrorView(
+    onRetry: () => setState(() => attempt++),
+  ),
+  onModelLoaded: () => debugPrint('Model ready'),
+  onModelLoadError: (error, stackTrace) => reportError(error, stackTrace),
+)
+```
+
+`onModelLoaded` fires once, after the model is drawn and its `defaultZoom` is applied. It is the right moment to drive the camera or apply overrides: controller calls made earlier are ignored or have no effect. Lighting gets up to 10 seconds before the overlay lifts, and a failed lighting download does not fail the load. `onModelLoadError` receives the underlying error, for example a `PlatformException` or an HTTP failure.
+
+## Example app
+
+<p align="center">
+  <img src="doc/media/example_home_ios.png" width="260" alt="Example app home screen" />
+</p>
+
+The [example app](example) has one small page per feature, each with a "What to try" note and a status line saying what you should see:
+
+- **Getting started:** load a GLB, a glTF with separate files, or a model from a URL.
+- **Selection:** tap to select, selection order, preselected parts.
+- **Cache:** saved selections.
+- **Visibility:** show and hide part groups.
+- **Materials and textures:** runtime PBR overrides and textures, per-part selection colors.
+- **Camera:** zoom steps, reset, and zoom levels.
+- **Diagnostics:** open and close the viewer repeatedly to check memory.
 
 ## Contributing
 
