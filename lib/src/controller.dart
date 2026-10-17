@@ -69,7 +69,8 @@ class Interactive3dController {
   }
 
   /// Adds [delta] to the current zoom level, for example `0.25` for a zoom-in
-  /// button. Works after pinching; the result stays within 0.5 to 3.0.
+  /// button. Works after pinching. Stays within 0.5 to 3.0, and never moves
+  /// against [delta] if a pinch or [setCameraZoomLevel] went past that range.
   Future<void> zoomBy(double delta) async {
     _ensureAttached();
     await _state!.zoomBy(delta);

@@ -118,7 +118,7 @@ class SceneManager {
     }
 
     /// Adds [delta] to the zoom level read from the live camera, so it also
-    /// accounts for pinching. The result stays within the Android pinch range.
+    /// accounts for pinching. Clamped like CameraController.zoomBy on Android.
     func zoomBy(_ delta: Float) {
         guard delta.isFinite, let view = scnView, let scene = view.scene,
               let pov = view.pointOfView, let camera = pov.camera,
@@ -128,7 +128,8 @@ class SceneManager {
         let current = Self.zoomLevel(
             magnification: (framing.radius * Self.halfFovTan)
                 / (distance * tan(Float(camera.fieldOfView) * .pi / 360)))
-        frame(zoom: min(max(current + delta, 0.5), 3.0), fromFront: false, framing: framing)
+        let next = min(max(current + delta, min(current, 0.5)), max(current, 3.0))
+        frame(zoom: next, fromFront: false, framing: framing)
     }
 
     /// Saves the starting view once SceneKit has created its camera.

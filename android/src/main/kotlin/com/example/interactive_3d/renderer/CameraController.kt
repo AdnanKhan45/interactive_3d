@@ -120,10 +120,13 @@ internal class CameraController {
     }
 
     /**
-     * Adds [delta] to the zoom level, clamped to the pinch range.
+     * Adds [delta] to the zoom level within the pinch range. A level already past
+     * the range is never pushed further out, nor pulled back against [delta].
      */
     fun zoomBy(delta: Float) {
-        zoomLevel = (zoomLevel + delta).coerceIn(MIN_ZOOM, MAX_ZOOM)
+        zoomLevel = (zoomLevel + delta).coerceIn(
+            minOf(zoomLevel, MIN_ZOOM), maxOf(zoomLevel, MAX_ZOOM)
+        )
     }
 
     /**

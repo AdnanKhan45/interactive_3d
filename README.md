@@ -379,7 +379,7 @@ await controller.resetCamera();
 await controller.setCameraZoomLevel(2.0);
 ```
 
-Zoom values above 1.0 zoom in and values below zoom out. `zoomBy` keeps the result within 0.5 to 3.0, the same range as pinching on Android. The same value frames the model the same way on Android and iOS. On iOS, when `defaultZoom` is not set, the model keeps the platform's own starting view, and `resetCamera` returns to it.
+Zoom values above 1.0 zoom in and values below zoom out. `zoomBy` keeps the result within 0.5 to 3.0, the same range as pinching on Android. If a pinch or `setCameraZoomLevel` already went past that range, `zoomBy` never moves against the step: zoom-in holds and zoom-out steps back toward the range. The same value frames the model the same way on Android and iOS. On iOS, when `defaultZoom` is not set, the model keeps the platform's own starting view, and `resetCamera` returns to it.
 
 ## Contributing
 
