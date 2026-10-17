@@ -60,6 +60,8 @@ class Interactive3dPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
       "loadModel" -> handleLoadModel(call, result)
       "loadEnvironment" -> handleLoadEnvironment(call, result)
       "setZoomLevel" -> handleSetZoomLevel(call, result)
+      "resetCamera" -> handleResetCamera(call, result)
+      "zoomBy" -> handleZoomBy(call, result)
       "setPartGroupVisibility" -> handleSetPartGroupVisibility(call, result)
       "unselectEntities" -> handleUnselectEntities(call, result)
       "clearCache" -> handleClearCache(call, result)
@@ -186,6 +188,34 @@ class Interactive3dPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
       ?: return result.error("TEXTURE_NOT_FOUND", "Texture $textureId not found", null)
 
     entry.setCameraZoomLevel(zoom)
+    result.success(null)
+  }
+
+  private fun handleResetCamera(call: MethodCall, result: MethodChannel.Result) {
+    val textureId = call.argument<Number>("textureId")?.toLong()
+    val zoom = call.argument<Double>("zoom")?.toFloat()
+
+    if (textureId == null || zoom == null)
+      return result.error("INVALID_ARGUMENT", "textureId and zoom required", null)
+
+    val entry = textureEntries[textureId]
+      ?: return result.error("TEXTURE_NOT_FOUND", "Texture $textureId not found", null)
+
+    entry.resetCamera(zoom)
+    result.success(null)
+  }
+
+  private fun handleZoomBy(call: MethodCall, result: MethodChannel.Result) {
+    val textureId = call.argument<Number>("textureId")?.toLong()
+    val delta = call.argument<Double>("delta")?.toFloat()
+
+    if (textureId == null || delta == null)
+      return result.error("INVALID_ARGUMENT", "textureId and delta required", null)
+
+    val entry = textureEntries[textureId]
+      ?: return result.error("TEXTURE_NOT_FOUND", "Texture $textureId not found", null)
+
+    entry.zoomBy(delta)
     result.success(null)
   }
 

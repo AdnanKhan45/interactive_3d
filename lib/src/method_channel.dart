@@ -296,6 +296,22 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
   }
 
   @override
+  Future<void> resetCamera(int textureId, double zoom) async {
+    await _pluginChannel.invokeMethod('resetCamera', {
+      'textureId': textureId,
+      'zoom': zoom,
+    });
+  }
+
+  @override
+  Future<void> zoomBy(int textureId, double delta) async {
+    await _pluginChannel.invokeMethod('zoomBy', {
+      'textureId': textureId,
+      'delta': delta,
+    });
+  }
+
+  @override
   Future<void> clearCache(int textureId) async {
     await _pluginChannel.invokeMethod('clearCache', {
       'textureId': textureId,

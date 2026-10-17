@@ -29,6 +29,7 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
     // Answered exactly once, on main: first drawn frame, timeout, newer load, or cleanup.
     private var pendingLoadResult: FlutterResult?
     private var awaitingFirstFrame = false
+    private var awaitingHomePose = false
     private var firstFrameTimeout: DispatchWorkItem?
 
     init(frame: CGRect, viewId: Int64, messenger: FlutterBinaryMessenger, args: Any?) {
@@ -92,6 +93,21 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             handleLoadModel(call, result: result)
         case "setZoomLevel":
             handleSetZoomLevel(call, result: result)
+        case "resetCamera":
+            let zoom = (call.arguments as? [String: Any])?["zoom"] as? Double
+            DispatchQueue.main.async { [weak self] in
+                self?.sceneManager.resetCamera(zoom: zoom.map(Float.init))
+                result(nil)
+            }
+        case "zoomBy":
+            guard let delta = (call.arguments as? [String: Any])?["delta"] as? Double else {
+                result(FlutterError(code: "INVALID_ARGUMENT", message: "delta required", details: nil))
+                return
+            }
+            DispatchQueue.main.async { [weak self] in
+                self?.sceneManager.zoomBy(Float(delta))
+                result(nil)
+            }
         case "loadHdrBackground":
             handleLoadHdrBackground(call, result: result)
         case "unselectEntities":
@@ -529,6 +545,7 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
         guard !isDisposed else { return }
         isDisposed = true
 
+        awaitingHomePose = false
         finishLoad(FlutterError(code: "DISPOSED", message: "The 3D view was disposed before loading finished", details: nil))
 
         // Break retain cycles
@@ -562,7 +579,8 @@ extension Interactive3DPlatformView: SCNSceneRendererDelegate {
         finishLoad(FlutterError(code: "LOAD_SUPERSEDED", message: "A newer model load replaced this one", details: nil))
         pendingLoadResult = result
         awaitingFirstFrame = true
-        scnView.delegate = self
+        awaitingHomePose = true
+        updateFrameListener()
 
         // Covers a view that never renders (e.g. off screen); the reply then
         // means loaded but not necessarily drawn.
@@ -575,17 +593,27 @@ extension Interactive3DPlatformView: SCNSceneRendererDelegate {
         guard let result = pendingLoadResult else { return }
         pendingLoadResult = nil
         awaitingFirstFrame = false
-        scnView.delegate = nil
+        updateFrameListener()
         firstFrameTimeout?.cancel()
         firstFrameTimeout = nil
         result(value)
     }
 
+    // SceneKit creates its default camera after the first frame is drawn, so
+    // the starting view is captured on a later frame than the load reply.
+    private func updateFrameListener() {
+        scnView.delegate = (awaitingFirstFrame || awaitingHomePose) ? self : nil
+    }
+
     func renderer(_ renderer: SCNSceneRenderer, didRenderScene scene: SCNScene, atTime time: TimeInterval) {
         // Called on SceneKit's render thread; all load state lives on main.
         DispatchQueue.main.async { [weak self] in
-            guard let self = self, self.awaitingFirstFrame, scene === self.scnView.scene else { return }
-            self.finishLoad(nil)
+            guard let self = self, scene === self.scnView.scene else { return }
+            if self.awaitingFirstFrame { self.finishLoad(nil) }
+            if self.awaitingHomePose, self.sceneManager.captureHomePose() {
+                self.awaitingHomePose = false
+            }
+            self.updateFrameListener()
         }
     }
 }

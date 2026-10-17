@@ -559,6 +559,26 @@ class Interactive3dState extends State<Interactive3d> {
     }
   }
 
+  Future<void> resetCamera() async {
+    if (Platform.isIOS) {
+      await _iosMethodChannel
+          ?.invokeMethod('resetCamera', {'zoom': widget.defaultZoom});
+    } else {
+      if (_platform == null || _textureId == null) return;
+      await _platform!.resetCamera(_textureId!, widget.defaultZoom ?? 1.0);
+    }
+  }
+
+  Future<void> zoomBy(double delta) async {
+    if (!delta.isFinite) return;
+    if (Platform.isIOS) {
+      await _iosMethodChannel?.invokeMethod('zoomBy', {'delta': delta});
+    } else {
+      if (_platform == null || _textureId == null) return;
+      await _platform!.zoomBy(_textureId!, delta);
+    }
+  }
+
   Future<void> clearCache() async {
     if (Platform.isIOS) {
       await _iosMethodChannel?.invokeMethod('clearCache');

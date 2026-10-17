@@ -439,6 +439,23 @@ class FilamentRenderer(
 
     fun setCameraZoomLevel(zoom: Float) {
         cameraController.setZoom(zoom)
+        applyCamera()
+    }
+
+    /** Returns to the framing used right after load, at [zoom]. */
+    fun resetCamera(zoom: Float) {
+        val (center, halfExtent) = modelLoader.getBoundingBox() ?: return
+        cameraController.fitToBoundingBox(center, halfExtent)
+        cameraController.setZoom(zoom)
+        applyCamera()
+    }
+
+    fun zoomBy(delta: Float) {
+        cameraController.zoomBy(delta)
+        applyCamera()
+    }
+
+    private fun applyCamera() {
         camera?.let {
             cameraController.applyProjection(it, width, height)
             cameraController.applyToCamera(it)
