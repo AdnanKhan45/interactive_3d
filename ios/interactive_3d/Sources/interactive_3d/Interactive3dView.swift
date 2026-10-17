@@ -65,7 +65,6 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
         scnView.addGestureRecognizer(tapGesture)
 
         scnView.scene = SCNScene()
-        scnView.delegate = self
     }
 
     func view() -> UIView {
@@ -563,6 +562,7 @@ extension Interactive3DPlatformView: SCNSceneRendererDelegate {
         finishLoad(FlutterError(code: "LOAD_SUPERSEDED", message: "A newer model load replaced this one", details: nil))
         pendingLoadResult = result
         awaitingFirstFrame = true
+        scnView.delegate = self
 
         // Covers a view that never renders (e.g. off screen); the reply then
         // means loaded but not necessarily drawn.
@@ -575,6 +575,7 @@ extension Interactive3DPlatformView: SCNSceneRendererDelegate {
         guard let result = pendingLoadResult else { return }
         pendingLoadResult = nil
         awaitingFirstFrame = false
+        scnView.delegate = nil
         firstFrameTimeout?.cancel()
         firstFrameTimeout = nil
         result(value)

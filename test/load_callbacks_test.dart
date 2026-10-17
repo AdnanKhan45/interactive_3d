@@ -44,6 +44,10 @@ void main() {
 
   tearDown(() {
     messenger.setMockMethodCallHandler(plugin, null);
+    messenger.setMockStreamHandler(
+      const EventChannel('interactive_3d_events_7'),
+      null,
+    );
     messenger.setMockMessageHandler('flutter/assets', null);
   });
 
@@ -134,6 +138,44 @@ void main() {
     );
 
     expect((reported! as PlatformException).code, 'NO_TEXTURE');
+    expect(calls, isNot(contains('loadModel')));
+  });
+
+  testWidgets('does not retry createTexture after a failure', (tester) async {
+    createTexture = () async => throw PlatformException(code: 'NO_TEXTURE');
+
+    await pumpViewer(
+      tester,
+      Interactive3d(
+        modelPath: 'assets/model.glb',
+        loadingWidget: const SizedBox(),
+        errorBuilder: (_, __) => const Text('failed'),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(calls.where((c) => c == 'createTexture'), hasLength(1));
+    expect(find.text('failed'), findsOneWidget);
+  });
+
+  testWidgets('disposes a texture created after the widget is removed',
+      (tester) async {
+    final created = Completer<Object?>();
+    createTexture = () => created.future;
+
+    await pumpViewer(
+      tester,
+      Interactive3d(
+        modelPath: 'assets/model.glb',
+        loadingWidget: const SizedBox(),
+      ),
+    );
+    await tester.pumpWidget(const SizedBox());
+    created.complete({'textureId': 7});
+    await tester.pump();
+
+    expect(calls, contains('disposeTexture'));
     expect(calls, isNot(contains('loadModel')));
   });
 
