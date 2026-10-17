@@ -184,7 +184,7 @@ Interactive3d(
 )
 ```
 
-A missing resource does not fail the load: it is logged, and the model shows without it.
+List every file the `.gltf` references. A missing file can fail the load (reported through `onModelLoadError`) or leave the model without that geometry or texture, depending on the platform and the file.
 
 </details>
 
