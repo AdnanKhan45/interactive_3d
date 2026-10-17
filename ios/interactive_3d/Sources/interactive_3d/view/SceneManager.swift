@@ -94,11 +94,70 @@ class SceneManager {
         scnView?.scene = scene
     }
 
-    /// Sets the camera distance from the model origin.
+    /// Frames the model the way the Android renderer does at [zoomLevel], so the
+    /// same value shows the same picture on both platforms.
     func setCameraZoomLevel(_ zoomLevel: Float) {
-        guard let cam = cameraNode, zoomLevel > 0 else { return }
-        cam.position = SCNVector3(x: 0, y: 0, z: zoomLevel)
-        cam.camera?.zNear = 0.01
+        guard let view = scnView, let scene = view.scene,
+              zoomLevel.isFinite, zoomLevel > 0 else { return }
+
+        guard let (lower, upper) = geometryBounds(of: scene) else { return }
+        let maxHalfExtent = simd_reduce_max((upper - lower) / 2)
+        guard maxHalfExtent > 0 else { return }
+        let target = (lower + upper) / 2
+
+        // Mirrors CameraController.fitToBoundingBox and applyToCamera on Android.
+        let fov = Self.baseFieldOfView
+        let fitDistance = 2 / tan(fov * .pi / 180 / 8)
+        let radius = fitDistance * 1.4 * maxHalfExtent / 2
+        // Below 0.3 the 45 degree field of view would pass 150 degrees.
+        let zoom = max(zoomLevel, 0.3)
+
+        let existing = view.pointOfView
+        let pov = existing ?? makeCamera(in: scene)
+        // A new camera starts in front of the model, matching Android's default orbit.
+        var direction = existing.map { $0.simdWorldPosition - target } ?? simd_float3(0, 0, 1)
+        if simd_length(direction) < 1e-5 { direction = simd_float3(0, 0, 1) }
+        pov.simdWorldPosition = target + simd_normalize(direction) * (radius / zoom)
+        pov.simdLook(at: target)
+        pov.camera?.fieldOfView = CGFloat(fov / zoom)
+        pov.camera?.projectionDirection = .vertical
+        pov.camera?.automaticallyAdjustsZRange = true
+        view.defaultCameraController.target = SCNVector3(target)
+        // SceneKit's default camera is outside the scene graph, so moving it
+        // does not schedule a frame on its own.
+        view.setNeedsDisplay()
+    }
+
+    private static let baseFieldOfView: Float = 45
+
+    /// World-space bounds of the model's geometry, ignoring lights and cameras.
+    private func geometryBounds(of scene: SCNScene) -> (simd_float3, simd_float3)? {
+        var lower = simd_float3(repeating: .infinity)
+        var upper = simd_float3(repeating: -.infinity)
+        scene.rootNode.enumerateHierarchy { node, _ in
+            guard node.geometry != nil else { return }
+            let (minBound, maxBound) = node.boundingBox
+            for corner in 0..<8 {
+                let local = simd_float3(
+                    corner & 1 == 0 ? minBound.x : maxBound.x,
+                    corner & 2 == 0 ? minBound.y : maxBound.y,
+                    corner & 4 == 0 ? minBound.z : maxBound.z)
+                let world = node.simdConvertPosition(local, to: nil)
+                lower = simd_min(lower, world)
+                upper = simd_max(upper, world)
+            }
+        }
+        return lower.x.isFinite ? (lower, upper) : nil
+    }
+
+    private func makeCamera(in scene: SCNScene) -> SCNNode {
+        let node = SCNNode()
+        node.camera = SCNCamera()
+        node.name = "interactive3d_camera"
+        scene.rootNode.addChildNode(node)
+        scnView?.pointOfView = node
+        cameraNode = node
+        return node
     }
 
     /// Loads an HDR/EXR image as the scene background.
