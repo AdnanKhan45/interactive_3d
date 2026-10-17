@@ -49,6 +49,7 @@ class SceneManager {
 
         SCNTransaction.flush()
         cameraNode = nil
+        homePose = nil
     }
 
     /// Loads a GLB/glTF model from raw bytes into the scene view.
@@ -97,35 +98,109 @@ class SceneManager {
     /// Frames the model the way the Android renderer does at [zoomLevel], so the
     /// same value shows the same picture on both platforms.
     func setCameraZoomLevel(_ zoomLevel: Float) {
+        frame(zoom: zoomLevel, fromFront: false)
+    }
+
+    /// Returns to the view shown after load: Android-style framing at [zoom], or
+    /// the native starting view when no zoom was set.
+    func resetCamera(zoom: Float?) {
+        guard let view = scnView else { return }
+        view.defaultCameraController.stopInertia()
+        if let zoom = zoom {
+            frame(zoom: zoom, fromFront: true)
+        } else if let home = homePose, let pov = view.pointOfView,
+                  let scene = view.scene, let framing = framing(of: scene) {
+            pov.simdWorldTransform = home.transform
+            pov.camera?.fieldOfView = home.fieldOfView
+            view.defaultCameraController.target = SCNVector3(framing.target)
+            view.setNeedsDisplay()
+        }
+    }
+
+    /// Adds [delta] to the zoom level read from the live camera, so it also
+    /// accounts for pinching. Clamped like CameraController.zoomBy on Android.
+    func zoomBy(_ delta: Float) {
+        guard delta.isFinite, let view = scnView, let scene = view.scene,
+              let pov = view.pointOfView, let camera = pov.camera,
+              let framing = framing(of: scene) else { return }
+        let distance = simd_distance(pov.simdWorldPosition, framing.target)
+        guard distance > 0 else { return }
+        let current = Self.zoomLevel(
+            magnification: (framing.radius * Self.halfFovTan)
+                / (distance * tan(Float(camera.fieldOfView) * .pi / 360)))
+        let next = min(max(current + delta, min(current, 0.5)), max(current, 3.0))
+        frame(zoom: next, fromFront: false, framing: framing)
+    }
+
+    /// Saves the starting view once SceneKit has created its camera.
+    /// Returns false while there is no camera yet.
+    func captureHomePose() -> Bool {
+        guard homePose == nil else { return true }
+        guard let pov = scnView?.pointOfView, let camera = pov.camera else { return false }
+        homePose = (pov.simdWorldTransform, camera.fieldOfView)
+        return true
+    }
+
+    private var homePose: (transform: simd_float4x4, fieldOfView: CGFloat)?
+
+    private func frame(
+        zoom zoomLevel: Float, fromFront: Bool,
+        framing known: (target: simd_float3, radius: Float)? = nil
+    ) {
         guard let view = scnView, let scene = view.scene,
-              zoomLevel.isFinite, zoomLevel > 0 else { return }
-
-        guard let (lower, upper) = geometryBounds(of: scene) else { return }
-        let maxHalfExtent = simd_reduce_max((upper - lower) / 2)
-        guard maxHalfExtent > 0 else { return }
-        let target = (lower + upper) / 2
-
-        // Mirrors CameraController.fitToBoundingBox and applyToCamera on Android.
-        let fov = Self.baseFieldOfView
-        let fitDistance = 2 / tan(fov * .pi / 180 / 8)
-        let radius = fitDistance * 1.4 * maxHalfExtent / 2
+              zoomLevel.isFinite, zoomLevel > 0,
+              let framing = known ?? framing(of: scene) else { return }
         // Below 0.3 the 45 degree field of view would pass 150 degrees.
         let zoom = max(zoomLevel, 0.3)
 
         let existing = view.pointOfView
         let pov = existing ?? makeCamera(in: scene)
-        // A new camera starts in front of the model, matching Android's default orbit.
-        var direction = existing.map { $0.simdWorldPosition - target } ?? simd_float3(0, 0, 1)
+        // A new or reset camera looks from the front, matching Android's default orbit.
+        var direction = simd_float3(0, 0, 1)
+        if !fromFront, let current = existing?.simdWorldPosition {
+            direction = current - framing.target
+        }
         if simd_length(direction) < 1e-5 { direction = simd_float3(0, 0, 1) }
-        pov.simdWorldPosition = target + simd_normalize(direction) * (radius / zoom)
-        pov.simdLook(at: target)
-        pov.camera?.fieldOfView = CGFloat(fov / zoom)
+        pov.simdWorldPosition = framing.target + simd_normalize(direction) * (framing.radius / zoom)
+        if fromFront {
+            pov.simdLook(at: framing.target, up: simd_float3(0, 1, 0), localFront: SCNNode.simdLocalFront)
+        } else {
+            pov.simdLook(at: framing.target)
+        }
+        pov.camera?.fieldOfView = CGFloat(Self.baseFieldOfView / zoom)
         pov.camera?.projectionDirection = .vertical
         pov.camera?.automaticallyAdjustsZRange = true
-        view.defaultCameraController.target = SCNVector3(target)
+        view.defaultCameraController.target = SCNVector3(framing.target)
         // SceneKit's default camera is outside the scene graph, so moving it
         // does not schedule a frame on its own.
         view.setNeedsDisplay()
+    }
+
+    /// Orbit target and zoom 1.0 camera distance, mirroring
+    /// CameraController.fitToBoundingBox on Android.
+    private func framing(of scene: SCNScene) -> (target: simd_float3, radius: Float)? {
+        guard let (lower, upper) = geometryBounds(of: scene) else { return nil }
+        let maxHalfExtent = simd_reduce_max((upper - lower) / 2)
+        guard maxHalfExtent > 0 else { return nil }
+        let fitDistance = 2 / tan(Self.baseFieldOfView * .pi / 180 / 8)
+        return ((lower + upper) / 2, fitDistance * 1.4 * maxHalfExtent / 2)
+    }
+
+    private static let halfFovTan = tan(baseFieldOfView * .pi / 360)
+
+    /// Inverts Android's zoom, which divides both the camera distance and the
+    /// field of view, so it has no closed form; magnification rises with zoom.
+    private static func zoomLevel(magnification: Float) -> Float {
+        func magnificationAt(_ zoom: Float) -> Float {
+            zoom * halfFovTan / tan(baseFieldOfView * .pi / 360 / zoom)
+        }
+        var low: Float = 0.3, high: Float = 10
+        let target = min(max(magnification, magnificationAt(low)), magnificationAt(high))
+        for _ in 0..<40 {
+            let mid = (low + high) / 2
+            if magnificationAt(mid) < target { low = mid } else { high = mid }
+        }
+        return (low + high) / 2
     }
 
     private static let baseFieldOfView: Float = 45

@@ -65,6 +65,12 @@ abstract class Interactive3dPlatform extends PlatformInterface {
   /// Sets the camera zoom level.
   Future<void> setCameraZoomLevel(int textureId, double zoom);
 
+  /// Returns the camera to its framing after load, at [zoom].
+  Future<void> resetCamera(int textureId, double zoom);
+
+  /// Adds [delta] to the camera zoom level.
+  Future<void> zoomBy(int textureId, double delta);
+
   /// Toggles visibility for a group of model parts.
   Future<void> updatePartGroupConfig({
     required int textureId,

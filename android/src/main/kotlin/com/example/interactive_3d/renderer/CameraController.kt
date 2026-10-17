@@ -24,6 +24,8 @@ internal class CameraController {
         private const val NEAR_PLANE = 0.001
         private const val FAR_PLANE = 1000.0
         private const val THROTTLE_MS = 8L
+        private const val MIN_ZOOM = 0.5f
+        private const val MAX_ZOOM = 3.0f
     }
 
     // Spherical orbit state
@@ -118,6 +120,16 @@ internal class CameraController {
     }
 
     /**
+     * Adds [delta] to the zoom level within the pinch range. A level already past
+     * the range is never pushed further out, nor pulled back against [delta].
+     */
+    fun zoomBy(delta: Float) {
+        zoomLevel = (zoomLevel + delta).coerceIn(
+            minOf(zoomLevel, MIN_ZOOM), maxOf(zoomLevel, MAX_ZOOM)
+        )
+    }
+
+    /**
      * Handles a pan gesture. Returns true if the camera was updated,
      * false if the update was throttled.
      */
@@ -143,7 +155,7 @@ internal class CameraController {
         } else {
             1.0f - (1.0f - scale) * 0.15f
         }
-        zoomLevel = (zoomLevel * factor).coerceIn(0.5f, 3.0f)
+        zoomLevel = (zoomLevel * factor).coerceIn(MIN_ZOOM, MAX_ZOOM)
         return true
     }
 
