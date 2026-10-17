@@ -1,7 +1,7 @@
 # interactive_3d [![Pub](https://img.shields.io/pub/v/interactive_3d.svg)](https://pub.dev/packages/interactive_3d)
 
 <p align="center">
-  <img src="assets/FlutterFilament_logo_v2.png" alt="interactive_3d" width="440" />
+  <img src="doc/media/FlutterFilament_logo_v2.png" alt="interactive_3d" width="440" />
 </p>
 
 <p align="center">
@@ -292,8 +292,8 @@ Overrides are not persisted by the plugin. Store them in your own state layer (S
 Upload a PNG or JPEG onto any part at runtime as its base color texture, with no GLB rebuild. Pass the encoded bytes, and the plugin decodes them natively. An active color override tints the uploaded texture, the same way it tints a GLB texture.
 
 <p align="center">
-  <img src="assets/texture_android.png" width="250" alt="Runtime texture on Android (Filament)" />
-  <img src="assets/texture_ios.png" width="250" alt="Runtime texture on iOS (SceneKit)" />
+  <img src="doc/media/texture_android.png" width="250" alt="Runtime texture on Android (Filament)" />
+  <img src="doc/media/texture_ios.png" width="250" alt="Runtime texture on iOS (SceneKit)" />
 </p>
 <p align="center"><em>A photo applied to teeth at runtime. Android (left) and iOS (right).</em></p>
 
