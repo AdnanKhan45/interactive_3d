@@ -1,3 +1,12 @@
+## 2.3.0
+
+* 17th release of `interactive_3d`: **Camera Controls and Reliable Loading** 🎥
+- New controller methods `resetCamera()` and `zoomBy(delta)` for your own reset and zoom buttons. `zoomBy` steps from the live zoom, so it stays correct after a pinch.
+- Zoom now works on iOS: `defaultZoom` and `setCameraZoomLevel` frame the model the same way on Android and iOS. iOS apps that never set `defaultZoom` keep their current starting view.
+- New `onModelLoaded`, `onModelLoadError`, and `errorBuilder`. `loadingWidget` now stays up until the model is drawn, on both platforms; it used to disappear early on Android and never showed on iOS.
+- Fixes: Android reported a load as finished too early, could lose a load requested before its surface was ready, crashed on load errors, and drew late loads and zoom changes only after a touch. Multi-file `.gltf` models now load on iOS. Apps no longer bundle the plugin's README images or 3.5 MB of unused lighting files.
+- Try it out from the reorganized example app, especially the **Camera** and **Load from a URL** pages. The README is rewritten with new recordings.
+
 ## 2.2.0
 
 * 16th release of `interactive_3d`: **Runtime Base Color Textures** 🖼️
