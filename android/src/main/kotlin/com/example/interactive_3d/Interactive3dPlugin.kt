@@ -126,9 +126,7 @@ class Interactive3dPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
 
     try {
       val backgroundColor = call.argument<List<Double>>("backgroundColor")
-      if (backgroundColor != null && backgroundColor.size >= 3) {
-        entry.setBackgroundColor(backgroundColor)
-      }
+        ?.takeIf { it.size >= 3 }
 
       entry.loadModel(
         buffer = ByteBuffer.wrap(modelBytes),
@@ -142,9 +140,10 @@ class Interactive3dPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         clearSelectionsOnHighlight = call.argument<Boolean>("clearSelectionsOnHighlight") ?: false,
         selectionSequence = call.argument("selectionSequence"),
         initialMaterialOverrides = call.argument("initialMaterialOverrides"),
-        initialEntityTextures = call.argument("initialEntityTextures")
+        initialEntityTextures = call.argument("initialEntityTextures"),
+        backgroundColor = backgroundColor,
+        result = result
       )
-      result.success(null)
     } catch (e: Exception) {
       Log.e(TAG, "Error loading model: ${e.message}", e)
       result.error("MODEL_LOAD_FAILED", e.message, null)

@@ -6,6 +6,7 @@ import android.os.Looper
 import android.util.Log
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel
+import io.flutter.plugin.common.MethodChannel
 import io.flutter.view.TextureRegistry
 import com.example.interactive_3d.renderer.FilamentRenderer
 import java.nio.ByteBuffer
@@ -13,10 +14,9 @@ import java.nio.ByteBuffer
 /**
  * Bridges Flutter's SurfaceProducer with the Filament renderer.
  *
- * Manages the surface lifecycle: creates a [FilamentRenderer] when the
- * surface first becomes available, destroys and recreates the SwapChain
- * on app background/resume, and queues model/environment loads that
- * arrive before the surface is ready.
+ * Creates the [FilamentRenderer] once the surface is valid, either at
+ * startup or on the first load that needs it, and answers each model load
+ * only after it has actually finished.
  */
 class Interactive3dTextureEntry(
     private val context: Context,
@@ -37,9 +37,8 @@ class Interactive3dTextureEntry(
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    // Operations queued before the surface is available
-    private var pendingModelLoad: (() -> Unit)? = null
-    private var pendingEnvironmentLoad: (() -> Unit)? = null
+    // Answered exactly once: by the load itself, a newer load, or dispose.
+    private var pendingLoadResult: MethodChannel.Result? = null
 
     private var currentWidth: Int = width
     private var currentHeight: Int = height
@@ -77,13 +76,7 @@ class Interactive3dTextureEntry(
     }
 
     override fun onSurfaceAvailable() {
-        mainHandler.post {
-            initializeRendererIfReady()
-            pendingModelLoad?.invoke()
-            pendingModelLoad = null
-            pendingEnvironmentLoad?.invoke()
-            pendingEnvironmentLoad = null
-        }
+        mainHandler.post { initializeRendererIfReady() }
     }
 
     override fun onSurfaceCleanup() {
@@ -123,30 +116,55 @@ class Interactive3dTextureEntry(
         clearSelectionsOnHighlight: Boolean = false,
         selectionSequence: List<Map<String, Any>>? = null,
         initialMaterialOverrides: List<Map<String, Any>>? = null,
-        initialEntityTextures: List<Map<String, Any>>? = null
+        initialEntityTextures: List<Map<String, Any>>? = null,
+        backgroundColor: List<Double>? = null,
+        result: MethodChannel.Result
     ) {
-        val op = {
-            filamentRenderer?.loadModel(
-                buffer, fileName, resources, preselectedEntities,
-                selectionColor, patchColors, enableCache, cacheColor,
-                clearSelectionsOnHighlight, selectionSequence,
-                initialMaterialOverrides, initialEntityTextures
-            )
-        }
-        if (filamentRenderer != null && surfaceProducer?.getSurface()?.isValid == true) {
-            mainHandler.post { op() }
-        } else {
-            pendingModelLoad = { op(); Unit }
+        replyLoad { it.error("LOAD_SUPERSEDED", "A newer model load replaced this one", null) }
+        pendingLoadResult = result
+
+        mainHandler.post {
+            val renderer = ensureRenderer()
+                ?: return@post replyLoad {
+                    it.error("RENDERER_UNAVAILABLE", "Rendering surface is not ready", null)
+                }
+            try {
+                if (backgroundColor != null) renderer.setBackgroundColor(backgroundColor)
+                val loaded = renderer.loadModel(
+                    buffer, fileName, resources, preselectedEntities,
+                    selectionColor, patchColors, enableCache, cacheColor,
+                    clearSelectionsOnHighlight, selectionSequence,
+                    initialMaterialOverrides, initialEntityTextures
+                )
+                replyLoad {
+                    if (loaded) it.success(null)
+                    else it.error("MODEL_LOAD_FAILED", "Could not load $fileName", null)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading model: ${e.message}", e)
+                replyLoad { it.error("MODEL_LOAD_FAILED", e.message, null) }
+            }
         }
     }
 
-    fun loadEnvironment(iblBuffer: ByteBuffer, skyboxBuffer: ByteBuffer) {
-        val op = { filamentRenderer?.loadEnvironment(iblBuffer, skyboxBuffer) }
-        if (filamentRenderer != null && surfaceProducer?.getSurface()?.isValid == true) {
-            mainHandler.post { op() }
-        } else {
-            pendingEnvironmentLoad = { op(); Unit }
+    fun loadEnvironment(iblBuffer: ByteBuffer, skyboxBuffer: ByteBuffer) =
+        mainHandler.post {
+            try {
+                ensureRenderer()?.loadEnvironment(iblBuffer, skyboxBuffer)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading environment: ${e.message}", e)
+            }
         }
+
+    private fun ensureRenderer(): FilamentRenderer? {
+        if (filamentRenderer == null) initializeRendererIfReady()
+        return filamentRenderer
+    }
+
+    private fun replyLoad(reply: (MethodChannel.Result) -> Unit) {
+        val result = pendingLoadResult ?: return
+        pendingLoadResult = null
+        reply(result)
     }
 
     fun setCameraZoomLevel(zoom: Float) =
@@ -188,10 +206,6 @@ class Interactive3dTextureEntry(
     fun onScale(scale: Float) =
         mainHandler.post { filamentRenderer?.onScale(scale) }
 
-    fun setBackgroundColor(color: List<Double>) {
-        filamentRenderer?.setBackgroundColor(color)
-    }
-
     // -- Events ---------------------------------------------------------------
 
     private fun sendSelectionEvent(entities: List<Map<String, Any>>) {
@@ -220,6 +234,7 @@ class Interactive3dTextureEntry(
         eventChannel = null
 
         mainHandler.removeCallbacksAndMessages(null)
+        replyLoad { it.error("DISPOSED", "The 3D view was disposed before loading finished", null) }
 
         filamentRenderer?.cleanup()
         filamentRenderer = null
@@ -227,8 +242,5 @@ class Interactive3dTextureEntry(
         surfaceProducer?.setCallback(null)
         surfaceProducer?.release()
         surfaceProducer = null
-
-        pendingModelLoad = null
-        pendingEnvironmentLoad = null
     }
 }
