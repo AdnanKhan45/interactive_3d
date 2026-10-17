@@ -26,6 +26,11 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
     private var pendingInitialTextures: [[String: Any]]?
     private var isDisposed = false
 
+    // Answered exactly once, on main: first drawn frame, timeout, newer load, or cleanup.
+    private var pendingLoadResult: FlutterResult?
+    private var awaitingFirstFrame = false
+    private var firstFrameTimeout: DispatchWorkItem?
+
     init(frame: CGRect, viewId: Int64, messenger: FlutterBinaryMessenger, args: Any?) {
         scnView = SCNView(frame: frame.isEmpty ? UIScreen.main.bounds : frame)
         scnView.autoenablesDefaultLighting = false
@@ -60,6 +65,7 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
         scnView.addGestureRecognizer(tapGesture)
 
         scnView.scene = SCNScene()
+        scnView.delegate = self
     }
 
     func view() -> UIView {
@@ -202,7 +208,7 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
                 // Apply preselections last; selection wins visually.
                 self.applyPreselectedEntities()
 
-                result(nil)
+                self.replyAfterFirstFrame(result)
             } catch {
                 result(FlutterError(code: "LOAD_ERROR", message: error.localizedDescription, details: nil))
             }
@@ -524,6 +530,8 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
         guard !isDisposed else { return }
         isDisposed = true
 
+        finishLoad(FlutterError(code: "DISPOSED", message: "The 3D view was disposed before loading finished", details: nil))
+
         // Break retain cycles
         methodChannel.setMethodCallHandler(nil)
         eventChannel.setStreamHandler(nil)
@@ -544,5 +552,39 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
         pendingPreselectedEntities = nil
         pendingInitialOverrides = nil
         pendingInitialTextures = nil
+    }
+}
+
+// MARK: - First frame
+
+extension Interactive3DPlatformView: SCNSceneRendererDelegate {
+
+    private func replyAfterFirstFrame(_ result: @escaping FlutterResult) {
+        finishLoad(FlutterError(code: "LOAD_SUPERSEDED", message: "A newer model load replaced this one", details: nil))
+        pendingLoadResult = result
+        awaitingFirstFrame = true
+
+        // Covers a view that never renders (e.g. off screen); the reply then
+        // means loaded but not necessarily drawn.
+        let timeout = DispatchWorkItem { [weak self] in self?.finishLoad(nil) }
+        firstFrameTimeout = timeout
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: timeout)
+    }
+
+    private func finishLoad(_ value: Any?) {
+        guard let result = pendingLoadResult else { return }
+        pendingLoadResult = nil
+        awaitingFirstFrame = false
+        firstFrameTimeout?.cancel()
+        firstFrameTimeout = nil
+        result(value)
+    }
+
+    func renderer(_ renderer: SCNSceneRenderer, didRenderScene scene: SCNScene, atTime time: TimeInterval) {
+        // Called on SceneKit's render thread; all load state lives on main.
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, self.awaitingFirstFrame, scene === self.scnView.scene else { return }
+            self.finishLoad(nil)
+        }
     }
 }
