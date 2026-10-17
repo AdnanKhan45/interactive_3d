@@ -240,6 +240,7 @@ class FilamentRenderer(
     // Model Loading
     // -------------------------------------------------------------------------
 
+    /** Loads the model and applies initial state. Returns false if it could not be loaded. */
     fun loadModel(
         buffer: ByteBuffer,
         fileName: String,
@@ -253,11 +254,11 @@ class FilamentRenderer(
         selectionSequence: List<Map<String, Any>>? = null,
         initialMaterialOverrides: List<Map<String, Any>>? = null,
         initialEntityTextures: List<Map<String, Any>>? = null
-    ) {
-        val eng = engine ?: return
-        val scn = scene ?: return
-        val loader = assetLoader ?: return
-        val resLoader = resourceLoader ?: return
+    ): Boolean {
+        val eng = engine ?: return false
+        val scn = scene ?: return false
+        val loader = assetLoader ?: return false
+        val resLoader = resourceLoader ?: return false
 
         // Clean up previous model
         selection.reset(eng)
@@ -284,7 +285,7 @@ class FilamentRenderer(
 
         // Load
         val asset = modelLoader.loadModel(eng, scn, loader, resLoader, buffer, fileName, resources)
-            ?: return
+            ?: return false
 
         // Fit camera to model
         modelLoader.getBoundingBox()?.let { (center, halfExtent) ->
@@ -309,6 +310,9 @@ class FilamentRenderer(
             selection.highlightCachedEntities(asset, eng)
             selection.notifyCacheChanged()
         }
+
+        requestRender()
+        return true
     }
 
     fun setEntityMaterials(overrides: List<Map<String, Any>>) {
@@ -360,6 +364,7 @@ class FilamentRenderer(
 
         // Selection manager needs to know IBL state for correct reset behavior
         selection.iblLoaded = true
+        requestRender()
     }
 
     fun setBackgroundColor(color: List<Double>) {
@@ -438,6 +443,7 @@ class FilamentRenderer(
             cameraController.applyProjection(it, width, height)
             cameraController.applyToCamera(it)
         }
+        requestRender()
     }
 
     fun setPartGroupVisibility(group: Map<String, Any>, isVisible: Boolean) {
