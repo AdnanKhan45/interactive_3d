@@ -92,8 +92,19 @@ class Interactive3d extends StatefulWidget {
   /// Background color shown while the model is loading.
   final Color backgroundColor;
 
-  /// Widget displayed while the model is loading.
+  /// Shown over the view until the model is drawn. Defaults to a spinner.
   final Widget? loadingWidget;
+
+  /// Shown over the view when the model fails to load. Rebuild the widget
+  /// with a new key to retry.
+  final Widget Function(BuildContext context, Object error)? errorBuilder;
+
+  /// Called once the model is drawn at its starting zoom. Fires even if the
+  /// lighting fails to load.
+  final VoidCallback? onModelLoaded;
+
+  /// Called when the model fails to load. Without it, the error is only logged.
+  final void Function(Object error, StackTrace? stackTrace)? onModelLoadError;
 
   /// PBR overrides to apply once when the model first loads. Selection wins
   /// visually; deselect restores the override.
@@ -127,6 +138,9 @@ class Interactive3d extends StatefulWidget {
     this.selectionSequence,
     this.backgroundColor = Colors.black,
     this.loadingWidget,
+    this.errorBuilder,
+    this.onModelLoaded,
+    this.onModelLoadError,
     this.initialMaterialOverrides,
     this.initialEntityTextures,
   });
@@ -134,6 +148,8 @@ class Interactive3d extends StatefulWidget {
   @override
   Interactive3dState createState() => Interactive3dState();
 }
+
+enum _LoadPhase { loading, loaded, failed }
 
 /// State for [Interactive3d].
 ///
@@ -151,6 +167,8 @@ class Interactive3dState extends State<Interactive3d> {
   StreamSubscription? _iosEventSubscription;
 
   // Shared
+  _LoadPhase _loadPhase = _LoadPhase.loading;
+  Object? _loadError;
   StreamSubscription<List<EntityData>>? _selectionSubscription;
   StreamSubscription<List<String>>? _cacheSelectionSubscription;
   Size? _currentSize;
@@ -176,7 +194,7 @@ class Interactive3dState extends State<Interactive3d> {
 
   @override
   Widget build(BuildContext context) {
-    if (Platform.isIOS) return _buildIOSPlatformView();
+    if (Platform.isIOS) return _withLoadOverlay(_buildIOSPlatformView());
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -184,11 +202,12 @@ class Interactive3dState extends State<Interactive3d> {
 
         if (_textureId == null &&
             !_isInitializing &&
+            _loadPhase == _LoadPhase.loading &&
             size.width > 0 &&
             size.height > 0) {
           final dpr = MediaQuery.of(context).devicePixelRatio;
           // High-end: near-native quality, Mid: balanced, Low: max performance
-          // The native DeviceCapability tier is detected on init — here we approximate
+          // The native DeviceCapability tier is detected on init; here we approximate
           // based on pixel ratio as a proxy (high DPR devices tend to be flagship)
           _renderRatio = dpr >= 3.0 ? dpr.clamp(1.0, 2.0) : dpr.clamp(1.0, 1.5);
           _initializeTexture(size);
@@ -199,19 +218,64 @@ class Interactive3dState extends State<Interactive3d> {
           _updateTextureSize(size);
         }
 
-        return Container(
+        return _withLoadOverlay(Container(
           color: widget.backgroundColor,
-          child: _textureId != null
-              ? _buildTextureWidget()
-              : (widget.loadingWidget ??
-                  const Center(child: CircularProgressIndicator())),
-        );
+          child: _textureId != null ? _buildTextureWidget() : null,
+        ));
       },
     );
   }
 
+  Widget _withLoadOverlay(Widget view) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        view,
+        if (_loadPhase == _LoadPhase.loading)
+          ColoredBox(
+            color: widget.backgroundColor,
+            child: widget.loadingWidget ??
+                const Center(child: CircularProgressIndicator()),
+          ),
+        if (_loadPhase == _LoadPhase.failed && widget.errorBuilder != null)
+          widget.errorBuilder!(context, _loadError!),
+      ],
+    );
+  }
+
+  // The model is already drawn by now, so slow lighting must not hold the
+  // overlay forever; it keeps loading in the background after this.
+  static const _lightingWait = Duration(seconds: 10);
+
+  Future<void> _awaitLighting(Future<void> load) async {
+    final logged = load.catchError(
+      (Object e) => debugPrint('Error loading lighting: $e'),
+    );
+    await logged.timeout(_lightingWait, onTimeout: () {});
+  }
+
+  void _completeLoad() {
+    if (!mounted || _loadPhase != _LoadPhase.loading) return;
+    setState(() => _loadPhase = _LoadPhase.loaded);
+    widget.onModelLoaded?.call();
+  }
+
+  void _failLoad(Object error, StackTrace stackTrace) {
+    if (!mounted || _loadPhase != _LoadPhase.loading) return;
+    setState(() {
+      _loadPhase = _LoadPhase.failed;
+      _loadError = error;
+    });
+    final onError = widget.onModelLoadError;
+    if (onError != null) {
+      onError(error, stackTrace);
+    } else {
+      debugPrint('Error loading model: $error');
+    }
+  }
+
   // ---------------------------------------------------------------------------
-  // iOS — PlatformView
+  // iOS: PlatformView
   // ---------------------------------------------------------------------------
 
   Widget _buildIOSPlatformView() {
@@ -273,12 +337,14 @@ class Interactive3dState extends State<Interactive3d> {
         modelBytes = response.bodyBytes;
         modelName = widget.modelUrl!.split('/').last;
       } else {
-        return;
+        throw ArgumentError('Must provide either modelPath or modelUrl');
       }
+      if (!mounted) return;
 
       final resources = modelName.endsWith('.gltf')
           ? await _loadGltfResources()
           : const <String, ByteData>{};
+      if (!mounted) return;
 
       await channel.invokeMethod('loadModel', {
         'modelBytes': modelBytes,
@@ -301,37 +367,40 @@ class Interactive3dState extends State<Interactive3d> {
         'initialEntityTextures':
             widget.initialEntityTextures?.map((t) => t.toMap()).toList(),
       });
-
-      // iOS HDR/EXR background
-      if (widget.iOSBackgroundEnvPath != null ||
-          widget.iOSBackgroundEnvUrl != null) {
-        Uint8List? bgBytes;
-        if (widget.iOSBackgroundEnvPath != null) {
-          bgBytes = (await rootBundle.load(widget.iOSBackgroundEnvPath!))
-              .buffer
-              .asUint8List();
-        } else if (widget.iOSBackgroundEnvUrl != null) {
-          final response =
-              await http.get(Uri.parse(widget.iOSBackgroundEnvUrl!));
-          if (response.statusCode == 200) bgBytes = response.bodyBytes;
-        }
-        if (bgBytes != null) {
-          await channel
-              .invokeMethod('loadHdrBackground', {'backgroundBytes': bgBytes});
-        }
-      }
+      if (!mounted) return;
 
       if (widget.defaultZoom != null) {
         await channel
             .invokeMethod('setZoomLevel', {'zoom': widget.defaultZoom});
+        if (!mounted) return;
       }
-    } catch (e) {
-      debugPrint('Error loading iOS model: $e');
+    } catch (e, stackTrace) {
+      _failLoad(e, stackTrace);
+      return;
+    }
+
+    await _awaitLighting(_loadIOSBackground(channel));
+    _completeLoad();
+  }
+
+  Future<void> _loadIOSBackground(MethodChannel channel) async {
+    Uint8List? bgBytes;
+    if (widget.iOSBackgroundEnvPath != null) {
+      bgBytes = (await rootBundle.load(widget.iOSBackgroundEnvPath!))
+          .buffer
+          .asUint8List();
+    } else if (widget.iOSBackgroundEnvUrl != null) {
+      final response = await http.get(Uri.parse(widget.iOSBackgroundEnvUrl!));
+      if (response.statusCode == 200) bgBytes = response.bodyBytes;
+    }
+    if (bgBytes != null && mounted) {
+      await channel
+          .invokeMethod('loadHdrBackground', {'backgroundBytes': bgBytes});
     }
   }
 
   // ---------------------------------------------------------------------------
-  // Android — Texture API
+  // Android: Texture API
   // ---------------------------------------------------------------------------
 
   Widget _buildTextureWidget() {
@@ -355,11 +424,18 @@ class Interactive3dState extends State<Interactive3d> {
         height: (size.height * _renderRatio).toInt(),
       );
 
-      _textureId = result['textureId'] as int?;
-      if (_textureId == null) throw Exception('Failed to create texture');
+      final textureId = result['textureId'] as int?;
+      if (textureId == null || textureId < 0) {
+        throw Exception('Failed to create texture');
+      }
+      if (!mounted) {
+        await _platform!.disposeTexture(textureId);
+        return;
+      }
 
+      _textureId = textureId;
       _currentSize = size;
-      if (mounted) setState(() {});
+      setState(() {});
 
       _selectionSubscription =
           _platform!.selectionStream(_textureId!).listen(_onSelectionChanged);
@@ -371,8 +447,8 @@ class Interactive3dState extends State<Interactive3d> {
       }
 
       await _loadAndroidModelAndEnvironment();
-    } catch (e) {
-      debugPrint('Error initializing texture: $e');
+    } catch (e, stackTrace) {
+      _failLoad(e, stackTrace);
     } finally {
       _isInitializing = false;
     }
@@ -384,6 +460,7 @@ class Interactive3dState extends State<Interactive3d> {
     Map<String, ByteData> resources = {};
     if ((widget.modelPath ?? widget.modelUrl ?? '').endsWith('.gltf')) {
       resources = await _loadGltfResources();
+      if (!mounted) return;
     }
 
     await _platform!.loadModel(
@@ -402,18 +479,21 @@ class Interactive3dState extends State<Interactive3d> {
       initialMaterialOverrides: widget.initialMaterialOverrides,
       initialEntityTextures: widget.initialEntityTextures,
     );
+    if (!mounted) return;
 
-    await _platform!.loadEnvironment(
+    if (widget.defaultZoom != null) {
+      await setZoom(widget.defaultZoom);
+      if (!mounted) return;
+    }
+
+    await _awaitLighting(_platform!.loadEnvironment(
       textureId: _textureId!,
       iblPath: widget.iblPath,
       iblUrl: widget.iblUrl,
       skyboxPath: widget.skyboxPath,
       skyboxUrl: widget.skyboxUrl,
-    );
-
-    if (widget.defaultZoom != null) {
-      await setZoom(widget.defaultZoom);
-    }
+    ));
+    _completeLoad();
   }
 
   Future<void> _updateTextureSize(Size size) async {
@@ -421,7 +501,7 @@ class Interactive3dState extends State<Interactive3d> {
   }
 
   // ---------------------------------------------------------------------------
-  // Gesture Handling (Android only — iOS handles natively)
+  // Gesture Handling (Android only; iOS handles natively)
   // ---------------------------------------------------------------------------
 
   void _handleTapUp(TapUpDetails details) {
@@ -466,7 +546,7 @@ class Interactive3dState extends State<Interactive3d> {
   }
 
   // ---------------------------------------------------------------------------
-  // Public API — routes to correct platform
+  // Public API: routes to correct platform
   // ---------------------------------------------------------------------------
 
   Future<void> setZoom(double? level) async {
