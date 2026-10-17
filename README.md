@@ -40,6 +40,8 @@ Android and iOS:
 - [Generate IBL and skybox](#generate-ibl-and-skybox)
 - [Runtime PBR material overrides](#runtime-pbr-material-overrides)
 - [Runtime base color textures](#runtime-base-color-textures)
+- [Loading and errors](#loading-and-errors)
+- [Camera controls](#camera-controls)
 - [Contributing](#contributing)
 - [Maintainer](#maintainer)
 
@@ -49,12 +51,14 @@ Android and iOS:
 - Load `.glb` and `.gltf` models from assets or a network URL.
 - Image-based lighting (IBL) and skybox from `.ktx` files.
 - Solid background color that skips the skybox while keeping IBL lighting quality.
+- A loading widget that stays up until the model is drawn, an error widget, and load callbacks.
 
 **Interaction**
 - Rotate, pan, and tap gestures out of the box.
 - Tap parts (named entities) to select them, and read the selection back in your app.
 - Preselect parts by name and give them custom highlight colors.
-- Toggle visibility of part groups, and set a default zoom.
+- Toggle visibility of part groups.
+- Camera controls for your own buttons: reset the view, zoom in and out by a step, or jump to a zoom level. The same zoom value looks the same on Android and iOS.
 - Persistent selection cache with a configurable cache color.
 - Ordered selection rules with bidirectional and tied-group support.
 
@@ -327,6 +331,55 @@ Two things to know:
 - Base color images are treated as sRGB, and images larger than 2048px on the longest side are downsampled to bound GPU memory.
 
 Like overrides, textures are not persisted by the plugin. Re-apply them from your own state layer after the model loads.
+
+## Loading and errors
+
+> Added in v2.3.0
+
+`loadingWidget` covers the view until the model is drawn, on both platforms. If loading fails, `errorBuilder` replaces it. Both are optional: without them you get a spinner while loading and an empty view on failure.
+
+```dart
+Interactive3d(
+  key: ValueKey(attempt), // change the key to retry
+  modelUrl: 'https://example.com/models/heart.glb',
+  loadingWidget: const MyBrandedSpinner(),
+  errorBuilder: (context, error) => MyErrorView(
+    onRetry: () => setState(() => attempt++),
+  ),
+  onModelLoaded: () => debugPrint('Model ready'),
+  onModelLoadError: (error, stackTrace) => reportError(error, stackTrace),
+)
+```
+
+`onModelLoaded` fires once, after the model is drawn at its `defaultZoom`, so it is a safe place to drive the camera or apply overrides. A failed lighting download does not fail the load, and lighting gets up to 10 seconds before the overlay lifts. `onModelLoadError` receives the underlying error, for example a `PlatformException` or an HTTP failure.
+
+## Camera controls
+
+> Added in v2.3.0
+
+The plugin ships no camera buttons. Build your own and call the controller:
+
+```dart
+final controller = Interactive3dController();
+
+Interactive3d(
+  controller: controller,
+  modelPath: 'assets/models/heart.glb',
+  defaultZoom: 1.5,
+);
+
+// Zoom buttons: step from the current zoom, even after the user pinched.
+await controller.zoomBy(0.25);
+await controller.zoomBy(-0.25);
+
+// Back to the view shown after load, including defaultZoom.
+await controller.resetCamera();
+
+// Jump to an exact zoom level.
+await controller.setCameraZoomLevel(2.0);
+```
+
+Zoom values above 1.0 zoom in and values below zoom out. `zoomBy` keeps the result within 0.5 to 3.0, the same range as pinching. The same value frames the model the same way on Android and iOS. On iOS, when `defaultZoom` is not set, the model keeps the platform's own starting view, and `resetCamera` returns to it.
 
 ## Contributing
 
