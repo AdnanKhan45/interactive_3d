@@ -550,7 +550,7 @@ class Interactive3dState extends State<Interactive3d> {
   // ---------------------------------------------------------------------------
 
   Future<void> setZoom(double? level) async {
-    if (level == null) return;
+    if (level == null || !level.isFinite || level <= 0) return;
     if (Platform.isIOS) {
       await _iosMethodChannel?.invokeMethod('setZoomLevel', {'zoom': level});
     } else {

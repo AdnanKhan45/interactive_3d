@@ -97,7 +97,8 @@ class SceneManager {
     /// Frames the model the way the Android renderer does at [zoomLevel], so the
     /// same value shows the same picture on both platforms.
     func setCameraZoomLevel(_ zoomLevel: Float) {
-        guard let view = scnView, let scene = view.scene, zoomLevel > 0 else { return }
+        guard let view = scnView, let scene = view.scene,
+              zoomLevel.isFinite, zoomLevel > 0 else { return }
 
         guard let (lower, upper) = geometryBounds(of: scene) else { return }
         let maxHalfExtent = simd_reduce_max((upper - lower) / 2)
@@ -111,8 +112,10 @@ class SceneManager {
         // Below 0.3 the 45 degree field of view would pass 150 degrees.
         let zoom = max(zoomLevel, 0.3)
 
-        let pov = view.pointOfView ?? makeCamera(in: scene)
-        var direction = pov.simdWorldPosition - target
+        let existing = view.pointOfView
+        let pov = existing ?? makeCamera(in: scene)
+        // A new camera starts in front of the model, matching Android's default orbit.
+        var direction = existing.map { $0.simdWorldPosition - target } ?? simd_float3(0, 0, 1)
         if simd_length(direction) < 1e-5 { direction = simd_float3(0, 0, 1) }
         pov.simdWorldPosition = target + simd_normalize(direction) * (radius / zoom)
         pov.simdLook(at: target)
