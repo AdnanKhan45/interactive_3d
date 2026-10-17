@@ -128,7 +128,7 @@ class SceneManager {
         let current = Self.zoomLevel(
             magnification: (framing.radius * Self.halfFovTan)
                 / (distance * tan(Float(camera.fieldOfView) * .pi / 360)))
-        frame(zoom: min(max(current + delta, 0.5), 3.0), fromFront: false)
+        frame(zoom: min(max(current + delta, 0.5), 3.0), fromFront: false, framing: framing)
     }
 
     /// Saves the starting view once SceneKit has created its camera.
@@ -142,10 +142,13 @@ class SceneManager {
 
     private var homePose: (transform: simd_float4x4, fieldOfView: CGFloat)?
 
-    private func frame(zoom zoomLevel: Float, fromFront: Bool) {
+    private func frame(
+        zoom zoomLevel: Float, fromFront: Bool,
+        framing known: (target: simd_float3, radius: Float)? = nil
+    ) {
         guard let view = scnView, let scene = view.scene,
               zoomLevel.isFinite, zoomLevel > 0,
-              let framing = framing(of: scene) else { return }
+              let framing = known ?? framing(of: scene) else { return }
         // Below 0.3 the 45 degree field of view would pass 150 degrees.
         let zoom = max(zoomLevel, 0.3)
 

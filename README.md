@@ -351,7 +351,7 @@ Interactive3d(
 )
 ```
 
-`onModelLoaded` fires once, after the model is drawn at its `defaultZoom`, so it is a safe place to drive the camera or apply overrides. A failed lighting download does not fail the load, and lighting gets up to 10 seconds before the overlay lifts. `onModelLoadError` receives the underlying error, for example a `PlatformException` or an HTTP failure.
+`onModelLoaded` fires once, after the model is drawn and its `defaultZoom` is applied, so it is a safe place to drive the camera or apply overrides. A failed lighting download does not fail the load, and lighting gets up to 10 seconds before the overlay lifts. `onModelLoadError` receives the underlying error, for example a `PlatformException` or an HTTP failure.
 
 ## Camera controls
 
@@ -379,7 +379,7 @@ await controller.resetCamera();
 await controller.setCameraZoomLevel(2.0);
 ```
 
-Zoom values above 1.0 zoom in and values below zoom out. `zoomBy` keeps the result within 0.5 to 3.0, the same range as pinching. The same value frames the model the same way on Android and iOS. On iOS, when `defaultZoom` is not set, the model keeps the platform's own starting view, and `resetCamera` returns to it.
+Zoom values above 1.0 zoom in and values below zoom out. `zoomBy` keeps the result within 0.5 to 3.0, the same range as pinching on Android. The same value frames the model the same way on Android and iOS. On iOS, when `defaultZoom` is not set, the model keeps the platform's own starting view, and `resetCamera` returns to it.
 
 ## Contributing
 

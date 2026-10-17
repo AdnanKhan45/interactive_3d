@@ -94,20 +94,9 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
         case "setZoomLevel":
             handleSetZoomLevel(call, result: result)
         case "resetCamera":
-            let zoom = (call.arguments as? [String: Any])?["zoom"] as? Double
-            DispatchQueue.main.async { [weak self] in
-                self?.sceneManager.resetCamera(zoom: zoom.map(Float.init))
-                result(nil)
-            }
+            handleResetCamera(call, result: result)
         case "zoomBy":
-            guard let delta = (call.arguments as? [String: Any])?["delta"] as? Double else {
-                result(FlutterError(code: "INVALID_ARGUMENT", message: "delta required", details: nil))
-                return
-            }
-            DispatchQueue.main.async { [weak self] in
-                self?.sceneManager.zoomBy(Float(delta))
-                result(nil)
-            }
+            handleZoomBy(call, result: result)
         case "loadHdrBackground":
             handleLoadHdrBackground(call, result: result)
         case "unselectEntities":
@@ -227,6 +216,25 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             } catch {
                 result(FlutterError(code: "LOAD_ERROR", message: error.localizedDescription, details: nil))
             }
+        }
+    }
+
+    private func handleResetCamera(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let zoom = (call.arguments as? [String: Any])?["zoom"] as? Double
+        DispatchQueue.main.async { [weak self] in
+            self?.sceneManager.resetCamera(zoom: zoom.map(Float.init))
+            result(nil)
+        }
+    }
+
+    private func handleZoomBy(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let delta = (call.arguments as? [String: Any])?["delta"] as? Double else {
+            result(FlutterError(code: "INVALID_ARGUMENT", message: "delta required", details: nil))
+            return
+        }
+        DispatchQueue.main.async { [weak self] in
+            self?.sceneManager.zoomBy(Float(delta))
+            result(nil)
         }
     }
 
@@ -546,6 +554,7 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
         isDisposed = true
 
         awaitingHomePose = false
+        updateFrameListener()
         finishLoad(FlutterError(code: "DISPOSED", message: "The 3D view was disposed before loading finished", details: nil))
 
         // Break retain cycles
@@ -610,8 +619,13 @@ extension Interactive3DPlatformView: SCNSceneRendererDelegate {
         DispatchQueue.main.async { [weak self] in
             guard let self = self, scene === self.scnView.scene else { return }
             if self.awaitingFirstFrame { self.finishLoad(nil) }
-            if self.awaitingHomePose, self.sceneManager.captureHomePose() {
-                self.awaitingHomePose = false
+            if self.awaitingHomePose {
+                if self.sceneManager.captureHomePose() {
+                    self.awaitingHomePose = false
+                } else {
+                    // On-demand rendering might not draw again until a touch.
+                    self.scnView.setNeedsDisplay()
+                }
             }
             self.updateFrameListener()
         }

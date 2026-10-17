@@ -560,17 +560,22 @@ class Interactive3dState extends State<Interactive3d> {
   }
 
   Future<void> resetCamera() async {
+    if (_loadPhase != _LoadPhase.loaded) return;
+    // Invalid values were ignored at load, so reset ignores them too.
+    final defaultZoom = widget.defaultZoom;
+    final zoom = defaultZoom != null && defaultZoom.isFinite && defaultZoom > 0
+        ? defaultZoom
+        : null;
     if (Platform.isIOS) {
-      await _iosMethodChannel
-          ?.invokeMethod('resetCamera', {'zoom': widget.defaultZoom});
+      await _iosMethodChannel?.invokeMethod('resetCamera', {'zoom': zoom});
     } else {
       if (_platform == null || _textureId == null) return;
-      await _platform!.resetCamera(_textureId!, widget.defaultZoom ?? 1.0);
+      await _platform!.resetCamera(_textureId!, zoom ?? 1.0);
     }
   }
 
   Future<void> zoomBy(double delta) async {
-    if (!delta.isFinite) return;
+    if (!delta.isFinite || _loadPhase != _LoadPhase.loaded) return;
     if (Platform.isIOS) {
       await _iosMethodChannel?.invokeMethod('zoomBy', {'delta': delta});
     } else {

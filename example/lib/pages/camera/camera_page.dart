@@ -27,6 +27,7 @@ class _CameraPageState extends State<CameraPage> {
   Future<void> _run(
       String call, Future<void> Function() action, DemoStatus status) async {
     await action();
+    if (!mounted) return;
     setState(() {
       _lastCall = call;
       _status = status;
