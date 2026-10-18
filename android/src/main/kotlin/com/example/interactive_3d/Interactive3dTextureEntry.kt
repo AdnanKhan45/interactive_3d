@@ -53,6 +53,8 @@ class Interactive3dTextureEntry(
             val producer = surfaceProducer ?: return -1L
 
             producer.setSize(width, height)
+            // Below API 29, release() throws if the surface was never requested.
+            producer.getSurface()
             producer.setCallback(this)
 
             val textureId = producer.id()
@@ -71,6 +73,8 @@ class Interactive3dTextureEntry(
             return textureId
         } catch (e: Exception) {
             Log.e(TAG, "Initialization failed: ${e.message}", e)
+            runCatching { surfaceProducer?.release() }
+            surfaceProducer = null
             return -1L
         }
     }
