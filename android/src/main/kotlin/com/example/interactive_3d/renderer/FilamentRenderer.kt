@@ -203,13 +203,13 @@ class FilamentRenderer(
         swapChain = null
     }
 
-    fun updateViewport(width: Int, height: Int) {
+    /** Rebinds the swap chain to [surface] at the new size and redraws. */
+    fun resize(surface: Surface, width: Int, height: Int) {
         if (width <= 0 || height <= 0) return
         this.width = width
         this.height = height
-
-        filamentView?.viewport = Viewport(0, 0, width, height)
-        camera?.let { cameraController.applyProjection(it, width, height) }
+        createSwapChain(surface)
+        requestRender()
     }
 
     // -------------------------------------------------------------------------

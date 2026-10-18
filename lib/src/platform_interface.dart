@@ -28,6 +28,9 @@ abstract class Interactive3dPlatform extends PlatformInterface {
   /// Releases the texture and all associated native resources.
   Future<void> disposeTexture(int textureId);
 
+  /// Resizes the render surface after a layout change, in render pixels.
+  Future<void> updateTextureSize(int textureId, int width, int height);
+
   /// Loads a 3D model into the renderer bound to [textureId].
   Future<void> loadModel({
     required int textureId,

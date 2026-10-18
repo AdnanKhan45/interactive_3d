@@ -57,6 +57,7 @@ class Interactive3dPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     when (call.method) {
       "createTexture" -> handleCreateTexture(call, result)
       "disposeTexture" -> handleDisposeTexture(call, result)
+      "updateSize" -> handleUpdateSize(call, result)
       "loadModel" -> handleLoadModel(call, result)
       "loadEnvironment" -> handleLoadEnvironment(call, result)
       "setZoomLevel" -> handleSetZoomLevel(call, result)
@@ -108,6 +109,21 @@ class Interactive3dPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
       it.dispose()
       result.success(null)
     } ?: result.error("TEXTURE_NOT_FOUND", "Texture $textureId not found", null)
+  }
+
+  private fun handleUpdateSize(call: MethodCall, result: MethodChannel.Result) {
+    val textureId = call.argument<Number>("textureId")?.toLong()
+    val width = call.argument<Int>("width")
+    val height = call.argument<Int>("height")
+
+    if (textureId == null || width == null || height == null)
+      return result.error("INVALID_ARGUMENT", "textureId, width and height required", null)
+
+    val entry = textureEntries[textureId]
+      ?: return result.error("TEXTURE_NOT_FOUND", "Texture $textureId not found", null)
+
+    entry.updateSize(width, height)
+    result.success(null)
   }
 
   // -------------------------------------------------------------------------

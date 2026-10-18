@@ -496,8 +496,16 @@ class Interactive3dState extends State<Interactive3d> {
     _completeLoad();
   }
 
-  Future<void> _updateTextureSize(Size size) async {
-    // Future: update texture size on native side
+  void _updateTextureSize(Size size) {
+    if (size.width <= 0 || size.height <= 0) return;
+    // Same scaling as createTexture, so tap and pan coordinates stay in step.
+    unawaited(_platform
+        ?.updateTextureSize(
+          _textureId!,
+          (size.width * _renderRatio).toInt(),
+          (size.height * _renderRatio).toInt(),
+        )
+        .catchError((Object e) => debugPrint('Error resizing view: $e')));
   }
 
   // ---------------------------------------------------------------------------

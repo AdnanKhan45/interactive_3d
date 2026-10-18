@@ -107,10 +107,15 @@ class Interactive3dTextureEntry(
 
     fun updateSize(width: Int, height: Int) {
         if (width <= 0 || height <= 0) return
-        currentWidth = width
-        currentHeight = height
-        surfaceProducer?.setSize(width, height)
-        filamentRenderer?.updateViewport(width, height)
+        mainHandler.post {
+            if (width == currentWidth && height == currentHeight) return@post
+            val producer = surfaceProducer ?: return@post
+            currentWidth = width
+            currentHeight = height
+            producer.setSize(width, height)
+            // setSize hands out a new Surface (or needs the EGL surface rebuilt), so rebind.
+            filamentRenderer?.resize(producer.getSurface(), width, height)
+        }
     }
 
     fun loadModel(

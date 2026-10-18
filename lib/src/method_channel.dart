@@ -49,6 +49,15 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
     });
   }
 
+  @override
+  Future<void> updateTextureSize(int textureId, int width, int height) async {
+    await _pluginChannel.invokeMethod('updateSize', {
+      'textureId': textureId,
+      'width': width,
+      'height': height,
+    });
+  }
+
   void _setupEventChannel(int textureId) {
     final eventChannel = EventChannel('interactive_3d_events_$textureId');
     _eventChannels[textureId] = eventChannel;
