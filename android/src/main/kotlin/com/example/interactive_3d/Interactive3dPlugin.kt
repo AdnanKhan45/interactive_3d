@@ -178,9 +178,9 @@ class Interactive3dPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     val iblBytes = call.argument<ByteArray>("iblBytes")
     val skyboxBytes = call.argument<ByteArray>("skyboxBytes")
 
-    if (iblBytes != null && skyboxBytes != null) {
+    if (iblBytes != null || skyboxBytes != null) {
       try {
-        entry.loadEnvironment(ByteBuffer.wrap(iblBytes), ByteBuffer.wrap(skyboxBytes))
+        entry.loadEnvironment(iblBytes?.let { ByteBuffer.wrap(it) }, skyboxBytes?.let { ByteBuffer.wrap(it) })
       } catch (e: Exception) {
         Log.e(TAG, "Error loading environment: ${e.message}", e)
         return result.error("ENVIRONMENT_LOAD_FAILED", e.message, null)

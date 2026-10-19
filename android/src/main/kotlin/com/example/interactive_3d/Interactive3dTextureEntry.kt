@@ -156,7 +156,7 @@ class Interactive3dTextureEntry(
         }
     }
 
-    fun loadEnvironment(iblBuffer: ByteBuffer, skyboxBuffer: ByteBuffer) =
+    fun loadEnvironment(iblBuffer: ByteBuffer?, skyboxBuffer: ByteBuffer?) =
         mainHandler.post {
             try {
                 val renderer = ensureRenderer()

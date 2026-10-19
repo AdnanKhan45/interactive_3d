@@ -347,23 +347,23 @@ class FilamentRenderer(
     // Environment
     // -------------------------------------------------------------------------
 
-    fun loadEnvironment(iblBuffer: ByteBuffer, skyboxBuffer: ByteBuffer) {
+    fun loadEnvironment(iblBuffer: ByteBuffer?, skyboxBuffer: ByteBuffer?) {
         val eng = engine ?: return
         val scn = scene ?: return
 
-        environment.loadEnvironment(eng, scn, iblBuffer, skyboxBuffer)
+        if (environment.loadEnvironment(eng, scn, iblBuffer, skyboxBuffer)) {
+            // Enable AO/bloom now that IBL is loaded
+            filamentView?.apply {
+                ambientOcclusionOptions = ambientOcclusionOptions.apply { enabled = this@FilamentRenderer.quality.enableAO }
+                bloomOptions = bloomOptions.apply { enabled = this@FilamentRenderer.quality.enableBloom }
+            }
 
-        // Enable AO/bloom now that IBL is loaded
-        filamentView?.apply {
-            ambientOcclusionOptions = ambientOcclusionOptions.apply { enabled = this@FilamentRenderer.quality.enableAO }
-            bloomOptions = bloomOptions.apply { enabled = this@FilamentRenderer.quality.enableBloom }
+            // Remove default emissive now that IBL provides ambient light
+            modelLoader.restoreEmissiveAfterIBL(eng)
+
+            // Selection manager needs to know IBL state for correct reset behavior
+            selection.iblLoaded = true
         }
-
-        // Remove default emissive now that IBL provides ambient light
-        modelLoader.restoreEmissiveAfterIBL(eng)
-
-        // Selection manager needs to know IBL state for correct reset behavior
-        selection.iblLoaded = true
         requestRender()
     }
 

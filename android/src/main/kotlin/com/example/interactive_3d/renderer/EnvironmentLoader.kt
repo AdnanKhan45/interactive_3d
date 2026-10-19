@@ -11,8 +11,8 @@ import java.nio.ByteBuffer
  * Handles two lighting paths:
  * - **Default lighting**: Three directional lights (sun, fill, back) and a
  *   flat indirect light for models rendered before IBL loads.
- * - **IBL lighting**: Loaded from KTX files. IBL always loads for PBR quality;
- *   the skybox is conditionally skipped when [useSolidBackground] is true.
+ * - **IBL lighting**: Loaded from KTX files. The IBL and skybox load
+ *   independently; the skybox is skipped when [useSolidBackground] is true.
  */
 internal class EnvironmentLoader {
 
@@ -27,6 +27,8 @@ internal class EnvironmentLoader {
 
     var indirectLight: IndirectLight? = null; private set
     var skybox: Skybox? = null; private set
+    private var iblCubemap: Texture? = null
+    private var skyboxCubemap: Texture? = null
     var iblLoaded = false; private set
 
     // Solid background
@@ -84,34 +86,55 @@ internal class EnvironmentLoader {
     }
 
     /**
-     * Loads IBL and skybox from KTX buffers.
-     *
-     * IBL always loads because it provides PBR-quality reflections and
-     * ambient light. The skybox is skipped when [useSolidBackground] is set,
-     * keeping the solid clear color visible behind the model.
+     * Loads whichever of the IBL and skybox KTX buffers is given, replacing any
+     * previous one. Returns true when an IBL was applied.
      */
     fun loadEnvironment(
         engine: Engine,
         scene: Scene,
-        iblBuffer: ByteBuffer,
-        skyboxBuffer: ByteBuffer
-    ) {
-        // Replace the placeholder indirect light with the real IBL
-        iblBuffer.rewind()
-        val iblBundle = KTX1Loader.createIndirectLight(engine, iblBuffer)
-        indirectLight?.let { engine.destroyIndirectLight(it) }
-        indirectLight = iblBundle.indirectLight
-        indirectLight?.intensity = 50_000.0f
-        scene.indirectLight = indirectLight
-
-        if (!useSolidBackground) {
-            skyboxBuffer.rewind()
-            val skyboxBundle = KTX1Loader.createSkybox(engine, skyboxBuffer)
-            skybox = skyboxBundle.skybox
-            scene.skybox = skybox
+        iblBuffer: ByteBuffer?,
+        skyboxBuffer: ByteBuffer?
+    ): Boolean {
+        var iblApplied = false
+        if (iblBuffer != null) {
+            try {
+                loadIbl(engine, scene, iblBuffer)
+                iblApplied = true
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not load IBL: ${e.message}")
+            }
         }
+        // A skybox would cover the solid clear color.
+        if (skyboxBuffer != null && !useSolidBackground) {
+            try { loadSkybox(engine, scene, skyboxBuffer) }
+            catch (e: Exception) { Log.w(TAG, "Could not load skybox: ${e.message}") }
+        }
+        return iblApplied
+    }
 
+    private fun loadIbl(engine: Engine, scene: Scene, buffer: ByteBuffer) {
+        buffer.rewind()
+        val bundle = KTX1Loader.createIndirectLight(engine, buffer)
+        val previous = indirectLight
+        val previousCubemap = iblCubemap
+        indirectLight = bundle.indirectLight?.apply { intensity = 50_000.0f }
+        iblCubemap = bundle.cubemap
+        scene.indirectLight = indirectLight
+        previous?.let { engine.destroyIndirectLight(it) }
+        previousCubemap?.let { engine.destroyTexture(it) }
         iblLoaded = true
+    }
+
+    private fun loadSkybox(engine: Engine, scene: Scene, buffer: ByteBuffer) {
+        buffer.rewind()
+        val bundle = KTX1Loader.createSkybox(engine, buffer)
+        val previous = skybox
+        val previousCubemap = skyboxCubemap
+        skybox = bundle.skybox
+        skyboxCubemap = bundle.cubemap
+        scene.skybox = skybox
+        previous?.let { engine.destroySkybox(it) }
+        previousCubemap?.let { engine.destroyTexture(it) }
     }
 
     /**
@@ -159,9 +182,13 @@ internal class EnvironmentLoader {
 
         indirectLight?.let { engine.destroyIndirectLight(it) }
         skybox?.let { engine.destroySkybox(it) }
+        iblCubemap?.let { engine.destroyTexture(it) }
+        skyboxCubemap?.let { engine.destroyTexture(it) }
 
         indirectLight = null
         skybox = null
+        iblCubemap = null
+        skyboxCubemap = null
         sunlight = 0
         fillLight = 0
         backLight = 0

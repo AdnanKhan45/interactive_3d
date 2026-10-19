@@ -49,7 +49,7 @@ abstract class Interactive3dPlatform extends PlatformInterface {
     List<EntityTexture>? initialEntityTextures,
   });
 
-  /// Loads IBL and skybox environment lighting.
+  /// Loads IBL lighting and a skybox; either one may be omitted.
   Future<void> loadEnvironment({
     required int textureId,
     String? iblPath,

@@ -207,41 +207,37 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
     String? skyboxPath,
     String? skyboxUrl,
   }) async {
-    Uint8List? iblBytes;
-    Uint8List? skyboxBytes;
-
-    try {
-      if (iblPath != null) {
-        iblBytes = (await rootBundle.load(iblPath)).buffer.asUint8List();
-      } else if (iblUrl != null) {
-        final response = await http.get(Uri.parse(iblUrl));
-        if (response.statusCode == 200) iblBytes = response.bodyBytes;
-      }
-    } catch (e) {
-      debugPrint('Error loading IBL: $e');
-    }
-
-    try {
-      if (skyboxPath != null) {
-        skyboxBytes = (await rootBundle.load(skyboxPath)).buffer.asUint8List();
-      } else if (skyboxUrl != null) {
-        final response = await http.get(Uri.parse(skyboxUrl));
-        if (response.statusCode == 200) skyboxBytes = response.bodyBytes;
-      }
-    } catch (e) {
-      debugPrint('Error loading skybox: $e');
-    }
-
-    if (iblBytes == null || skyboxBytes == null) {
-      debugPrint('Warning: Environment not fully loaded');
-      return;
-    }
+    final iblBytes = await _loadEnvironmentFile('IBL', iblPath, iblUrl);
+    final skyboxBytes =
+        await _loadEnvironmentFile('skybox', skyboxPath, skyboxUrl);
+    if (iblBytes == null && skyboxBytes == null) return;
 
     await _pluginChannel.invokeMethod('loadEnvironment', {
       'textureId': textureId,
       'iblBytes': iblBytes,
       'skyboxBytes': skyboxBytes,
     });
+  }
+
+  Future<Uint8List?> _loadEnvironmentFile(
+    String label,
+    String? path,
+    String? url,
+  ) async {
+    final source = path ?? url;
+    if (source == null) return null;
+    try {
+      if (path != null) {
+        return (await rootBundle.load(path)).buffer.asUint8List();
+      }
+      final response = await http.get(Uri.parse(url!));
+      if (response.statusCode == 200) return response.bodyBytes;
+      debugPrint(
+          'Error loading $label from $source: HTTP ${response.statusCode}');
+    } catch (e) {
+      debugPrint('Error loading $label from $source: $e');
+    }
+    return null;
   }
 
   @override
