@@ -262,7 +262,7 @@ class FilamentRenderer(
         val resLoader = resourceLoader ?: return false
 
         // Clean up previous model
-        selection.reset(eng)
+        selection.cleanup(eng)
         selection.iblLoaded = environment.iblLoaded
         modelLoader.cleanupCurrentModel(scn, loader)
 

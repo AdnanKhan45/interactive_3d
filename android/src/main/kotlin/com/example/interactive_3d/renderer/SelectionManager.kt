@@ -268,7 +268,10 @@ internal class SelectionManager {
 
     /** Removes the override on [entity] and restores GLB original if visible. */
     fun resetMaterialOverride(entity: Int, engine: Engine) {
-        // Destroy override instances first so they cannot be reused.
+        val wasApplied = entitiesWithOverrideApplied.remove(entity)
+        // Filament aborts when a bound instance is destroyed, so rebind the original first.
+        if (wasApplied) bindOriginals(entity, engine)
+
         overrideMaterials.remove(entity)?.values?.forEach { mat ->
             try { engine.destroyMaterialInstance(mat) }
             catch (e: Exception) { Log.w(TAG, "Failed to destroy override instance: ${e.message}") }
@@ -279,20 +282,18 @@ internal class SelectionManager {
         }
         overrideParams.remove(entity)
 
-        if (entity !in entitiesWithOverrideApplied) return
-        entitiesWithOverrideApplied.remove(entity)
+        if (wasApplied && entity !in entitiesWithSelectionColor && entity !in entitiesWithCacheColor) {
+            originalMaterials.remove(entity)
+        }
+    }
 
+    private fun bindOriginals(entity: Int, engine: Engine) {
         val rcm = engine.renderableManager
         if (!rcm.hasComponent(entity)) return
         val ri = rcm.getInstance(entity)
-
         originalMaterials[entity]?.forEach { (idx, mat) ->
             try { rcm.setMaterialInstanceAt(ri, idx, mat) }
-            catch (e: Exception) { Log.w(TAG, "Could not restore on override reset: ${e.message}") }
-        }
-
-        if (entity !in entitiesWithSelectionColor && entity !in entitiesWithCacheColor) {
-            originalMaterials.remove(entity)
+            catch (e: Exception) { Log.w(TAG, "Could not restore original material: ${e.message}") }
         }
     }
 
@@ -414,11 +415,26 @@ internal class SelectionManager {
             return
         }
         val tex = overrideTextures.remove(entity)
-        overrideMaterials.remove(entity)?.values?.forEach { mat ->
+        val previous = overrideMaterials.remove(entity)
+        // Filament aborts on destroying a bound instance, so bind the rebuilt override first.
+        applyMaterialOverride(entity, emptyMap(), engine)
+        if (entity !in entitiesWithSelectionColor) {
+            val rebuilt = overrideMaterials[entity].orEmpty()
+            val rcm = engine.renderableManager
+            if (rcm.hasComponent(entity)) {
+                val ri = rcm.getInstance(entity)
+                previous?.keys?.filter { it !in rebuilt }?.forEach { idx ->
+                    originalMaterials[entity]?.get(idx)?.let { mat ->
+                        try { rcm.setMaterialInstanceAt(ri, idx, mat) }
+                        catch (e: Exception) { Log.w(TAG, "Could not restore original material: ${e.message}") }
+                    }
+                }
+            }
+        }
+        previous?.values?.forEach { mat ->
             try { engine.destroyMaterialInstance(mat) }
             catch (e: Exception) { Log.w(TAG, "Failed to destroy override instance: ${e.message}") }
         }
-        applyMaterialOverride(entity, emptyMap(), engine)
         tex?.let {
             try { engine.destroyTexture(it) }
             catch (e: Exception) { Log.w(TAG, "Failed to destroy texture: ${e.message}") }
@@ -766,21 +782,10 @@ internal class SelectionManager {
         overrideTextures.clear()
     }
 
-    /**
-     * Full cleanup — restores originals then destroys everything.
-     */
+    /** Unbinds every plugin-created instance, then destroys all selection and override state. */
     fun cleanup(engine: Engine) {
-        val allColoredEntities = entitiesWithSelectionColor + entitiesWithCacheColor
-        allColoredEntities.forEach { entity ->
-            val rcm = engine.renderableManager
-            if (rcm.hasComponent(entity)) {
-                val ri = rcm.getInstance(entity)
-                originalMaterials[entity]?.forEach { (idx, mat) ->
-                    try { rcm.setMaterialInstanceAt(ri, idx, mat) }
-                    catch (_: Exception) {}
-                }
-            }
-        }
+        // Covers selection, cache and override instances, so none is bound when reset destroys it.
+        originalMaterials.keys.forEach { bindOriginals(it, engine) }
         reset(engine)
     }
 }
