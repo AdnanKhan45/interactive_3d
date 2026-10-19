@@ -1,3 +1,12 @@
+## 2.4.0
+
+* 18th release of `interactive_3d`: **Steadier Android and Rejected Taps** 🛠️
+- New `onSelectionRejected(name)` callback on both platforms: find out which part a `selectionSequence` refused, so you can tell the user why nothing happened.
+- Android crash fixes: no more crash when a view closes, reopens, or resets while a part shows a material override or texture, when a view closes during or right after loading, or on Android 9 and older.
+- Android now handles rotation and layout changes (the model keeps its shape and taps hit the right part), starts at `defaultZoom` without a flash at zoom 1.0, and keeps drawing until the latest change is on screen on slow GPUs.
+- Android lighting: `iblPath` and `skyboxPath` now each work on their own, and glow from the model file or an `emissive` override is no longer wiped when lighting loads. Overrides, preselection, and cache colors now hold on every part of large models.
+- Try it out from the example app, especially **Selection order**, which now shows rejected taps, and **Materials and textures**.
+
 ## 2.3.0
 
 * 17th release of `interactive_3d`: **Camera Controls and Reliable Loading** 🎥

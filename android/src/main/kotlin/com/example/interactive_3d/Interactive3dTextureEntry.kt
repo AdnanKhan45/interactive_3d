@@ -53,6 +53,8 @@ class Interactive3dTextureEntry(
             val producer = surfaceProducer ?: return -1L
 
             producer.setSize(width, height)
+            // Below API 29, release() throws if the surface was never requested.
+            producer.getSurface()
             producer.setCallback(this)
 
             val textureId = producer.id()
@@ -71,6 +73,8 @@ class Interactive3dTextureEntry(
             return textureId
         } catch (e: Exception) {
             Log.e(TAG, "Initialization failed: ${e.message}", e)
+            runCatching { surfaceProducer?.release() }
+            surfaceProducer = null
             return -1L
         }
     }
@@ -103,10 +107,15 @@ class Interactive3dTextureEntry(
 
     fun updateSize(width: Int, height: Int) {
         if (width <= 0 || height <= 0) return
-        currentWidth = width
-        currentHeight = height
-        surfaceProducer?.setSize(width, height)
-        filamentRenderer?.updateViewport(width, height)
+        mainHandler.post {
+            if (width == currentWidth && height == currentHeight) return@post
+            val producer = surfaceProducer ?: return@post
+            currentWidth = width
+            currentHeight = height
+            producer.setSize(width, height)
+            // setSize hands out a new Surface (or needs the EGL surface rebuilt), so rebind.
+            filamentRenderer?.resize(producer.getSurface(), width, height)
+        }
     }
 
     fun loadModel(
@@ -118,6 +127,7 @@ class Interactive3dTextureEntry(
         initialMaterialOverrides: List<Map<String, Any>>? = null,
         initialEntityTextures: List<Map<String, Any>>? = null,
         backgroundColor: List<Double>? = null,
+        defaultZoom: Float? = null,
         result: MethodChannel.Result
     ) {
         replyLoad { it.error("LOAD_SUPERSEDED", "A newer model load replaced this one", null) }
@@ -134,7 +144,7 @@ class Interactive3dTextureEntry(
                     buffer, fileName, resources, preselectedEntities,
                     selectionColor, patchColors, enableCache, cacheColor,
                     clearSelectionsOnHighlight, selectionSequence,
-                    initialMaterialOverrides, initialEntityTextures
+                    initialMaterialOverrides, initialEntityTextures, defaultZoom
                 )
                 replyLoad {
                     if (loaded) it.success(null)
@@ -147,7 +157,7 @@ class Interactive3dTextureEntry(
         }
     }
 
-    fun loadEnvironment(iblBuffer: ByteBuffer, skyboxBuffer: ByteBuffer) =
+    fun loadEnvironment(iblBuffer: ByteBuffer?, skyboxBuffer: ByteBuffer?) =
         mainHandler.post {
             try {
                 val renderer = ensureRenderer()

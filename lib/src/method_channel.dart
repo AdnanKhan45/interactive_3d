@@ -19,6 +19,7 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
   final Map<int, StreamController<List<EntityData>>> _selectionControllers = {};
   final Map<int, StreamController<List<String>>> _cacheSelectionControllers =
       {};
+  final Map<int, StreamController<String>> _selectionRejectedControllers = {};
 
   @override
   Future<Map<String, dynamic>> createTexture({
@@ -40,12 +41,23 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
   Future<void> disposeTexture(int textureId) async {
     _selectionControllers[textureId]?.close();
     _cacheSelectionControllers[textureId]?.close();
+    _selectionRejectedControllers[textureId]?.close();
     _selectionControllers.remove(textureId);
     _cacheSelectionControllers.remove(textureId);
+    _selectionRejectedControllers.remove(textureId);
     _eventChannels.remove(textureId);
 
     await _pluginChannel.invokeMethod('disposeTexture', {
       'textureId': textureId,
+    });
+  }
+
+  @override
+  Future<void> updateTextureSize(int textureId, int width, int height) async {
+    await _pluginChannel.invokeMethod('updateSize', {
+      'textureId': textureId,
+      'width': width,
+      'height': height,
     });
   }
 
@@ -54,6 +66,7 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
     _eventChannels[textureId] = eventChannel;
     _selectionControllers[textureId] = StreamController.broadcast();
     _cacheSelectionControllers[textureId] = StreamController.broadcast();
+    _selectionRejectedControllers[textureId] = StreamController.broadcast();
 
     eventChannel.receiveBroadcastStream().listen((event) {
       _onEvent(textureId, event);
@@ -74,6 +87,8 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
       final List<dynamic> cached = map['cachedEntities'];
       final names = cached.map<String>((e) => e['name'] as String).toList();
       _cacheSelectionControllers[textureId]?.add(names);
+    } else if (eventType == 'selectionRejected') {
+      _selectionRejectedControllers[textureId]?.add(map['name'] as String);
     }
   }
 
@@ -84,6 +99,10 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
   @override
   Stream<List<String>> cacheSelectionStream(int textureId) =>
       _cacheSelectionControllers[textureId]?.stream ?? const Stream.empty();
+
+  @override
+  Stream<String> selectionRejectedStream(int textureId) =>
+      _selectionRejectedControllers[textureId]?.stream ?? const Stream.empty();
 
   @override
   Future<void> loadModel({
@@ -101,6 +120,7 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
     List<double>? backgroundColor,
     List<MaterialOverride>? initialMaterialOverrides,
     List<EntityTexture>? initialEntityTextures,
+    double? defaultZoom,
   }) async {
     Uint8List modelBytes;
     String modelName;
@@ -143,6 +163,7 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
           initialMaterialOverrides?.map((o) => o.toMap()).toList(),
       'initialEntityTextures':
           initialEntityTextures?.map((t) => t.toMap()).toList(),
+      'defaultZoom': defaultZoom,
     });
   }
 
@@ -198,41 +219,37 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
     String? skyboxPath,
     String? skyboxUrl,
   }) async {
-    Uint8List? iblBytes;
-    Uint8List? skyboxBytes;
-
-    try {
-      if (iblPath != null) {
-        iblBytes = (await rootBundle.load(iblPath)).buffer.asUint8List();
-      } else if (iblUrl != null) {
-        final response = await http.get(Uri.parse(iblUrl));
-        if (response.statusCode == 200) iblBytes = response.bodyBytes;
-      }
-    } catch (e) {
-      debugPrint('Error loading IBL: $e');
-    }
-
-    try {
-      if (skyboxPath != null) {
-        skyboxBytes = (await rootBundle.load(skyboxPath)).buffer.asUint8List();
-      } else if (skyboxUrl != null) {
-        final response = await http.get(Uri.parse(skyboxUrl));
-        if (response.statusCode == 200) skyboxBytes = response.bodyBytes;
-      }
-    } catch (e) {
-      debugPrint('Error loading skybox: $e');
-    }
-
-    if (iblBytes == null || skyboxBytes == null) {
-      debugPrint('Warning: Environment not fully loaded');
-      return;
-    }
+    final iblBytes = await _loadEnvironmentFile('IBL', iblPath, iblUrl);
+    final skyboxBytes =
+        await _loadEnvironmentFile('skybox', skyboxPath, skyboxUrl);
+    if (iblBytes == null && skyboxBytes == null) return;
 
     await _pluginChannel.invokeMethod('loadEnvironment', {
       'textureId': textureId,
       'iblBytes': iblBytes,
       'skyboxBytes': skyboxBytes,
     });
+  }
+
+  Future<Uint8List?> _loadEnvironmentFile(
+    String label,
+    String? path,
+    String? url,
+  ) async {
+    final source = path ?? url;
+    if (source == null) return null;
+    try {
+      if (path != null) {
+        return (await rootBundle.load(path)).buffer.asUint8List();
+      }
+      final response = await http.get(Uri.parse(url!));
+      if (response.statusCode == 200) return response.bodyBytes;
+      debugPrint(
+          'Error loading $label from $source: HTTP ${response.statusCode}');
+    } catch (e) {
+      debugPrint('Error loading $label from $source: $e');
+    }
+    return null;
   }
 
   @override

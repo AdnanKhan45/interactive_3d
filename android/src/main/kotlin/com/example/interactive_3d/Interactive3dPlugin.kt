@@ -57,6 +57,7 @@ class Interactive3dPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     when (call.method) {
       "createTexture" -> handleCreateTexture(call, result)
       "disposeTexture" -> handleDisposeTexture(call, result)
+      "updateSize" -> handleUpdateSize(call, result)
       "loadModel" -> handleLoadModel(call, result)
       "loadEnvironment" -> handleLoadEnvironment(call, result)
       "setZoomLevel" -> handleSetZoomLevel(call, result)
@@ -110,6 +111,21 @@ class Interactive3dPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     } ?: result.error("TEXTURE_NOT_FOUND", "Texture $textureId not found", null)
   }
 
+  private fun handleUpdateSize(call: MethodCall, result: MethodChannel.Result) {
+    val textureId = call.argument<Number>("textureId")?.toLong()
+    val width = call.argument<Int>("width")
+    val height = call.argument<Int>("height")
+
+    if (textureId == null || width == null || height == null)
+      return result.error("INVALID_ARGUMENT", "textureId, width and height required", null)
+
+    val entry = textureEntries[textureId]
+      ?: return result.error("TEXTURE_NOT_FOUND", "Texture $textureId not found", null)
+
+    entry.updateSize(width, height)
+    result.success(null)
+  }
+
   // -------------------------------------------------------------------------
   // Model & Environment
   // -------------------------------------------------------------------------
@@ -144,6 +160,7 @@ class Interactive3dPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         initialMaterialOverrides = call.argument("initialMaterialOverrides"),
         initialEntityTextures = call.argument("initialEntityTextures"),
         backgroundColor = backgroundColor,
+        defaultZoom = call.argument<Double>("defaultZoom")?.toFloat(),
         result = result
       )
     } catch (e: Exception) {
@@ -162,9 +179,9 @@ class Interactive3dPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     val iblBytes = call.argument<ByteArray>("iblBytes")
     val skyboxBytes = call.argument<ByteArray>("skyboxBytes")
 
-    if (iblBytes != null && skyboxBytes != null) {
+    if (iblBytes != null || skyboxBytes != null) {
       try {
-        entry.loadEnvironment(ByteBuffer.wrap(iblBytes), ByteBuffer.wrap(skyboxBytes))
+        entry.loadEnvironment(iblBytes?.let { ByteBuffer.wrap(it) }, skyboxBytes?.let { ByteBuffer.wrap(it) })
       } catch (e: Exception) {
         Log.e(TAG, "Error loading environment: ${e.message}", e)
         return result.error("ENVIRONMENT_LOAD_FAILED", e.message, null)

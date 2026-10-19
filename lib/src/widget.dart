@@ -89,6 +89,10 @@ class Interactive3d extends StatefulWidget {
   /// Ordered selection rules that constrain which entities can be tapped next.
   final List<SequenceConfig>? selectionSequence;
 
+  /// Called with the part name when [selectionSequence] rejects a tap.
+  /// Names match those in [onSelectionChanged] on the same platform.
+  final void Function(String name)? onSelectionRejected;
+
   /// Background color shown while the model is loading.
   final Color backgroundColor;
 
@@ -136,6 +140,7 @@ class Interactive3d extends StatefulWidget {
     this.onCacheSelectionChanged,
     this.clearSelectionOnHighlight = false,
     this.selectionSequence,
+    this.onSelectionRejected,
     this.backgroundColor = Colors.black,
     this.loadingWidget,
     this.errorBuilder,
@@ -171,6 +176,7 @@ class Interactive3dState extends State<Interactive3d> {
   Object? _loadError;
   StreamSubscription<List<EntityData>>? _selectionSubscription;
   StreamSubscription<List<String>>? _cacheSelectionSubscription;
+  StreamSubscription<String>? _selectionRejectedSubscription;
   Size? _currentSize;
 
   @override
@@ -311,6 +317,8 @@ class Interactive3dState extends State<Interactive3d> {
         final List<dynamic> cached = map['cachedEntities'];
         final names = cached.map<String>((e) => e['name'] as String).toList();
         widget.onCacheSelectionChanged?.call(names);
+      } else if (eventType == 'selectionRejected') {
+        widget.onSelectionRejected?.call(map['name'] as String);
       }
     });
 
@@ -446,6 +454,10 @@ class Interactive3dState extends State<Interactive3d> {
             .listen(widget.onCacheSelectionChanged!);
       }
 
+      _selectionRejectedSubscription = _platform!
+          .selectionRejectedStream(_textureId!)
+          .listen((name) => widget.onSelectionRejected?.call(name));
+
       await _loadAndroidModelAndEnvironment();
     } catch (e, stackTrace) {
       _failLoad(e, stackTrace);
@@ -478,13 +490,9 @@ class Interactive3dState extends State<Interactive3d> {
       backgroundColor: widget.solidBackgroundColor,
       initialMaterialOverrides: widget.initialMaterialOverrides,
       initialEntityTextures: widget.initialEntityTextures,
+      defaultZoom: _validDefaultZoom,
     );
     if (!mounted) return;
-
-    if (widget.defaultZoom != null) {
-      await setZoom(widget.defaultZoom);
-      if (!mounted) return;
-    }
 
     await _awaitLighting(_platform!.loadEnvironment(
       textureId: _textureId!,
@@ -496,8 +504,16 @@ class Interactive3dState extends State<Interactive3d> {
     _completeLoad();
   }
 
-  Future<void> _updateTextureSize(Size size) async {
-    // Future: update texture size on native side
+  void _updateTextureSize(Size size) {
+    if (size.width <= 0 || size.height <= 0) return;
+    // Same scaling as createTexture, so tap and pan coordinates stay in step.
+    unawaited(_platform
+        ?.updateTextureSize(
+          _textureId!,
+          (size.width * _renderRatio).toInt(),
+          (size.height * _renderRatio).toInt(),
+        )
+        .catchError((Object e) => debugPrint('Error resizing view: $e')));
   }
 
   // ---------------------------------------------------------------------------
@@ -559,13 +575,15 @@ class Interactive3dState extends State<Interactive3d> {
     }
   }
 
+  /// [Interactive3d.defaultZoom], or null when unset or invalid.
+  double? get _validDefaultZoom {
+    final zoom = widget.defaultZoom;
+    return zoom != null && zoom.isFinite && zoom > 0 ? zoom : null;
+  }
+
   Future<void> resetCamera() async {
     if (_loadPhase != _LoadPhase.loaded) return;
-    // Invalid values were ignored at load, so reset ignores them too.
-    final defaultZoom = widget.defaultZoom;
-    final zoom = defaultZoom != null && defaultZoom.isFinite && defaultZoom > 0
-        ? defaultZoom
-        : null;
+    final zoom = _validDefaultZoom;
     if (Platform.isIOS) {
       await _iosMethodChannel?.invokeMethod('resetCamera', {'zoom': zoom});
     } else {
@@ -746,6 +764,7 @@ class Interactive3dState extends State<Interactive3d> {
   void dispose() {
     _selectionSubscription?.cancel();
     _cacheSelectionSubscription?.cancel();
+    _selectionRejectedSubscription?.cancel();
     _iosEventSubscription?.cancel();
     widget.controller?.detach(this);
 

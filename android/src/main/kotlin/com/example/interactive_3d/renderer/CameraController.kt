@@ -44,6 +44,8 @@ internal class CameraController {
     var isInteracting = false
         private set
     var idleFrameCount = 0
+    // True until a frame is drawn after the latest change; keeps the loop from idling first.
+    var pendingDraw = false
 
     private var lastCameraUpdate = 0L
     private val idleHandler = Handler(Looper.getMainLooper())
@@ -166,6 +168,7 @@ internal class CameraController {
     fun markInteracting() {
         isInteracting = true
         idleFrameCount = 0
+        pendingDraw = true
         idleHandler.removeCallbacks(markIdleRunnable)
         idleHandler.postDelayed(markIdleRunnable, 500)
     }

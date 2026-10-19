@@ -28,6 +28,9 @@ abstract class Interactive3dPlatform extends PlatformInterface {
   /// Releases the texture and all associated native resources.
   Future<void> disposeTexture(int textureId);
 
+  /// Resizes the render surface after a layout change, in render pixels.
+  Future<void> updateTextureSize(int textureId, int width, int height);
+
   /// Loads a 3D model into the renderer bound to [textureId].
   Future<void> loadModel({
     required int textureId,
@@ -44,9 +47,10 @@ abstract class Interactive3dPlatform extends PlatformInterface {
     List<double>? backgroundColor,
     List<MaterialOverride>? initialMaterialOverrides,
     List<EntityTexture>? initialEntityTextures,
+    double? defaultZoom,
   });
 
-  /// Loads IBL and skybox environment lighting.
+  /// Loads IBL lighting and a skybox; either one may be omitted.
   Future<void> loadEnvironment({
     required int textureId,
     String? iblPath,
@@ -133,4 +137,7 @@ abstract class Interactive3dPlatform extends PlatformInterface {
 
   /// Stream of cache selection changes for a given texture.
   Stream<List<String>> cacheSelectionStream(int textureId);
+
+  /// Stream of part names whose taps the selection sequence rejected.
+  Stream<String> selectionRejectedStream(int textureId);
 }

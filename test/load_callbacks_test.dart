@@ -13,18 +13,23 @@ void main() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 
   late List<String> calls;
+  late Map<dynamic, dynamic>? loadModelArgs;
   late Future<Object?> Function() createTexture;
   late Future<Object?> Function() loadModel;
   late Future<Object?> Function() loadEnvironment;
 
   setUp(() {
     calls = [];
+    loadModelArgs = null;
     createTexture = () async => {'textureId': 7};
     loadModel = () async => null;
     loadEnvironment = () async => null;
 
     messenger.setMockMethodCallHandler(plugin, (call) {
       calls.add(call.method);
+      if (call.method == 'loadModel') {
+        loadModelArgs = call.arguments as Map<dynamic, dynamic>;
+      }
       return switch (call.method) {
         'createTexture' => createTexture(),
         'loadModel' => loadModel(),
@@ -82,22 +87,31 @@ void main() {
     expect(loaded, 1);
   });
 
-  testWidgets('applies defaultZoom before onModelLoaded', (tester) async {
-    List<String>? callsAtLoaded;
-
+  testWidgets('sends defaultZoom with the model load', (tester) async {
     await pumpViewer(
       tester,
-      Interactive3d(
+      const Interactive3d(
         modelPath: 'assets/model.glb',
-        loadingWidget: const SizedBox(),
+        loadingWidget: SizedBox(),
         defaultZoom: 2,
-        onModelLoaded: () => callsAtLoaded = List.of(calls),
       ),
     );
 
-    expect(callsAtLoaded, isNotNull);
-    expect(callsAtLoaded!.indexOf('setZoomLevel'),
-        greaterThan(callsAtLoaded!.indexOf('loadModel')));
+    expect(loadModelArgs!['defaultZoom'], 2.0);
+    expect(calls, isNot(contains('setZoomLevel')));
+  });
+
+  testWidgets('treats an invalid defaultZoom as unset at load', (tester) async {
+    await pumpViewer(
+      tester,
+      const Interactive3d(
+        modelPath: 'assets/model.glb',
+        loadingWidget: SizedBox(),
+        defaultZoom: double.nan,
+      ),
+    );
+
+    expect(loadModelArgs!['defaultZoom'], isNull);
   });
 
   testWidgets('reports a native load failure to the callback and builder',

@@ -24,8 +24,8 @@ import java.nio.ByteBuffer
  * main thread; background work is limited to file I/O.
  *
  * Render loop uses [Choreographer] with adaptive frame pacing:
- * full 60 fps during interaction, 30 fps after a brief idle, and fully
- * paused after ~1.5 seconds of no input.
+ * full 60 fps during interaction, 30 fps after a brief idle, and paused
+ * once idle and the latest change has been drawn.
  */
 class FilamentRenderer(
     private val context: Context,
@@ -203,13 +203,13 @@ class FilamentRenderer(
         swapChain = null
     }
 
-    fun updateViewport(width: Int, height: Int) {
+    /** Rebinds the swap chain to [surface] at the new size and redraws. */
+    fun resize(surface: Surface, width: Int, height: Int) {
         if (width <= 0 || height <= 0) return
         this.width = width
         this.height = height
-
-        filamentView?.viewport = Viewport(0, 0, width, height)
-        camera?.let { cameraController.applyProjection(it, width, height) }
+        createSwapChain(surface)
+        requestRender()
     }
 
     // -------------------------------------------------------------------------
@@ -253,7 +253,8 @@ class FilamentRenderer(
         clearSelectionsOnHighlight: Boolean = false,
         selectionSequence: List<Map<String, Any>>? = null,
         initialMaterialOverrides: List<Map<String, Any>>? = null,
-        initialEntityTextures: List<Map<String, Any>>? = null
+        initialEntityTextures: List<Map<String, Any>>? = null,
+        defaultZoom: Float? = null
     ): Boolean {
         val eng = engine ?: return false
         val scn = scene ?: return false
@@ -261,7 +262,7 @@ class FilamentRenderer(
         val resLoader = resourceLoader ?: return false
 
         // Clean up previous model
-        selection.reset(eng)
+        selection.cleanup(eng)
         selection.iblLoaded = environment.iblLoaded
         modelLoader.cleanupCurrentModel(scn, loader)
 
@@ -290,6 +291,8 @@ class FilamentRenderer(
         // Fit camera to model
         modelLoader.getBoundingBox()?.let { (center, halfExtent) ->
             cameraController.fitToBoundingBox(center, halfExtent)
+            // Applied here so the first frame with the model is already at the starting zoom.
+            defaultZoom?.let { cameraController.setZoom(it) }
             camera?.let {
                 cameraController.applyProjection(it, width, height)
                 cameraController.applyToCamera(it)
@@ -347,23 +350,22 @@ class FilamentRenderer(
     // Environment
     // -------------------------------------------------------------------------
 
-    fun loadEnvironment(iblBuffer: ByteBuffer, skyboxBuffer: ByteBuffer) {
+    fun loadEnvironment(iblBuffer: ByteBuffer?, skyboxBuffer: ByteBuffer?) {
         val eng = engine ?: return
         val scn = scene ?: return
 
-        environment.loadEnvironment(eng, scn, iblBuffer, skyboxBuffer)
+        if (environment.loadEnvironment(eng, scn, iblBuffer, skyboxBuffer)) {
+            // Enable AO/bloom now that IBL is loaded
+            filamentView?.apply {
+                ambientOcclusionOptions = ambientOcclusionOptions.apply { enabled = this@FilamentRenderer.quality.enableAO }
+                bloomOptions = bloomOptions.apply { enabled = this@FilamentRenderer.quality.enableBloom }
+            }
 
-        // Enable AO/bloom now that IBL is loaded
-        filamentView?.apply {
-            ambientOcclusionOptions = ambientOcclusionOptions.apply { enabled = this@FilamentRenderer.quality.enableAO }
-            bloomOptions = bloomOptions.apply { enabled = this@FilamentRenderer.quality.enableBloom }
+            selection.clearFallbackEmissive(eng)
+
+            // Selection manager needs to know IBL state for correct reset behavior
+            selection.iblLoaded = true
         }
-
-        // Remove default emissive now that IBL provides ambient light
-        modelLoader.restoreEmissiveAfterIBL(eng)
-
-        // Selection manager needs to know IBL state for correct reset behavior
-        selection.iblLoaded = true
         requestRender()
     }
 
@@ -405,6 +407,8 @@ class FilamentRenderer(
             }
 
             selection.handleTap(entity, asset, eng)
+            // The pick result arrives after a drawn frame, so the highlight needs its own.
+            requestRender()
         }
     }
 
@@ -605,17 +609,20 @@ class FilamentRenderer(
 
     private inner class FrameCallback : Choreographer.FrameCallback {
         private val startTime = System.nanoTime()
-        private var frameCount = 0
+        private var tick = 0
 
         override fun doFrame(frameTimeNanos: Long) {
             if (!isRendering) return
             choreographer.postFrameCallback(this)
 
             // Adaptive frame pacing based on user interaction
+            tick++
             if (!cameraController.isInteracting) {
                 cameraController.idleFrameCount++
-                if (cameraController.idleFrameCount > 90) return       // Fully idle — save battery
-                if (cameraController.idleFrameCount > 30 && frameCount % 2 != 0) return // 30 fps
+                // Fully idle once the last change is drawn; the 600 cap covers a surface that never draws.
+                val drawn = !cameraController.pendingDraw || cameraController.idleFrameCount > 600
+                if (cameraController.idleFrameCount > 90 && drawn) return
+                if (cameraController.idleFrameCount > 30 && tick % 2 != 0) return // 30 fps
             }
 
             val rend = renderer ?: return
@@ -635,7 +642,7 @@ class FilamentRenderer(
                 if (rend.beginFrame(sc, frameTimeNanos)) {
                     rend.render(v)
                     rend.endFrame()
-                    frameCount++
+                    cameraController.pendingDraw = false
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Render error: ${e.message}")

@@ -40,6 +40,9 @@ internal class SelectionManager {
     // Set by the renderer after IBL loads — controls emissive fallback in resetColor
     var iblLoaded = false
 
+    // Entities given the pre-IBL fallback glow, cleared once IBL loads.
+    private val fallbackEmissiveEntities = mutableSetOf<Int>()
+
     // Original material backup for selected/cached entities
     private val originalMaterials = mutableMapOf<Int, MutableMap<Int, MaterialInstance>>()
     private val entitiesWithSelectionColor = mutableSetOf<Int>()
@@ -265,7 +268,10 @@ internal class SelectionManager {
 
     /** Removes the override on [entity] and restores GLB original if visible. */
     fun resetMaterialOverride(entity: Int, engine: Engine) {
-        // Destroy override instances first so they cannot be reused.
+        val wasApplied = entitiesWithOverrideApplied.remove(entity)
+        // Filament aborts when a bound instance is destroyed, so rebind the original first.
+        if (wasApplied) bindOriginals(entity, engine)
+
         overrideMaterials.remove(entity)?.values?.forEach { mat ->
             try { engine.destroyMaterialInstance(mat) }
             catch (e: Exception) { Log.w(TAG, "Failed to destroy override instance: ${e.message}") }
@@ -276,20 +282,18 @@ internal class SelectionManager {
         }
         overrideParams.remove(entity)
 
-        if (entity !in entitiesWithOverrideApplied) return
-        entitiesWithOverrideApplied.remove(entity)
+        if (wasApplied && entity !in entitiesWithSelectionColor && entity !in entitiesWithCacheColor) {
+            originalMaterials.remove(entity)
+        }
+    }
 
+    private fun bindOriginals(entity: Int, engine: Engine) {
         val rcm = engine.renderableManager
         if (!rcm.hasComponent(entity)) return
         val ri = rcm.getInstance(entity)
-
         originalMaterials[entity]?.forEach { (idx, mat) ->
             try { rcm.setMaterialInstanceAt(ri, idx, mat) }
-            catch (e: Exception) { Log.w(TAG, "Could not restore on override reset: ${e.message}") }
-        }
-
-        if (entity !in entitiesWithSelectionColor && entity !in entitiesWithCacheColor) {
-            originalMaterials.remove(entity)
+            catch (e: Exception) { Log.w(TAG, "Could not restore original material: ${e.message}") }
         }
     }
 
@@ -411,11 +415,26 @@ internal class SelectionManager {
             return
         }
         val tex = overrideTextures.remove(entity)
-        overrideMaterials.remove(entity)?.values?.forEach { mat ->
+        val previous = overrideMaterials.remove(entity)
+        // Filament aborts on destroying a bound instance, so bind the rebuilt override first.
+        applyMaterialOverride(entity, emptyMap(), engine)
+        if (entity !in entitiesWithSelectionColor) {
+            val rebuilt = overrideMaterials[entity].orEmpty()
+            val rcm = engine.renderableManager
+            if (rcm.hasComponent(entity)) {
+                val ri = rcm.getInstance(entity)
+                previous?.keys?.filter { it !in rebuilt }?.forEach { idx ->
+                    originalMaterials[entity]?.get(idx)?.let { mat ->
+                        try { rcm.setMaterialInstanceAt(ri, idx, mat) }
+                        catch (e: Exception) { Log.w(TAG, "Could not restore original material: ${e.message}") }
+                    }
+                }
+            }
+        }
+        previous?.values?.forEach { mat ->
             try { engine.destroyMaterialInstance(mat) }
             catch (e: Exception) { Log.w(TAG, "Failed to destroy override instance: ${e.message}") }
         }
-        applyMaterialOverride(entity, emptyMap(), engine)
         tex?.let {
             try { engine.destroyTexture(it) }
             catch (e: Exception) { Log.w(TAG, "Failed to destroy texture: ${e.message}") }
@@ -511,10 +530,11 @@ internal class SelectionManager {
             if (overrideMaterials.containsKey(entity)) {
                 entitiesWithOverrideApplied.add(entity)
             }
-        } else {
-            // No backup exists — reset to default PBR values.
+        } else if (!overrideMaterials.containsKey(entity)) {
+            // Only the GLB instance is reset; mutating a bound override would wipe the app's color.
             val count = rcm.getPrimitiveCount(ri)
             val emissiveValue = if (iblLoaded) 0.0f else 0.2f
+            if (!iblLoaded) fallbackEmissiveEntities.add(entity)
             for (i in 0 until count) {
                 try {
                     val mat = rcm.getMaterialInstanceAt(ri, i)
@@ -532,6 +552,31 @@ internal class SelectionManager {
         if (entity !in entitiesWithOverrideApplied) {
             originalMaterials.remove(entity)
         }
+    }
+
+    /**
+     * Removes the fallback glow [resetColor] gave entities before IBL loaded,
+     * leaving glTF and override emissive untouched.
+     */
+    fun clearFallbackEmissive(engine: Engine) {
+        val rcm = engine.renderableManager
+        for (entity in fallbackEmissiveEntities) {
+            if (!rcm.hasComponent(entity)) continue
+            val ri = rcm.getInstance(entity)
+            // The glow went onto the GLB instance: backed up if later highlighted, else still bound.
+            val targets = (originalMaterials[entity]?.values
+                ?: (0 until rcm.getPrimitiveCount(ri)).map { rcm.getMaterialInstanceAt(ri, it) })
+                .toMutableList()
+            // An override duplicated after the glow copied it, unless it sets its own emissive.
+            if (overrideParams[entity]?.containsKey("emissive") != true) {
+                overrideMaterials[entity]?.values?.let { targets += it }
+            }
+            for (mat in targets) {
+                try { mat.setParameter("emissiveFactor", 0.0f, 0.0f, 0.0f) }
+                catch (e: Exception) { Log.w(TAG, "Could not clear fallback emissive: ${e.message}") }
+            }
+        }
+        fallbackEmissiveEntities.clear()
     }
 
     /**
@@ -715,6 +760,7 @@ internal class SelectionManager {
         entitiesWithSelectionColor.clear()
         entitiesWithCacheColor.clear()
         entitiesWithOverrideApplied.clear()
+        fallbackEmissiveEntities.clear()
         overrideParams.clear()
     }
 
@@ -736,21 +782,10 @@ internal class SelectionManager {
         overrideTextures.clear()
     }
 
-    /**
-     * Full cleanup — restores originals then destroys everything.
-     */
+    /** Unbinds every plugin-created instance, then destroys all selection and override state. */
     fun cleanup(engine: Engine) {
-        val allColoredEntities = entitiesWithSelectionColor + entitiesWithCacheColor
-        allColoredEntities.forEach { entity ->
-            val rcm = engine.renderableManager
-            if (rcm.hasComponent(entity)) {
-                val ri = rcm.getInstance(entity)
-                originalMaterials[entity]?.forEach { (idx, mat) ->
-                    try { rcm.setMaterialInstanceAt(ri, idx, mat) }
-                    catch (_: Exception) {}
-                }
-            }
-        }
+        // Covers selection, cache and override instances, so none is bound when reset destroys it.
+        originalMaterials.keys.forEach { bindOriginals(it, engine) }
         reset(engine)
     }
 }

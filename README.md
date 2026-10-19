@@ -203,7 +203,7 @@ For a `.gltf` URL, `resources` are downloaded relative to the model URL.
 
 ## Lighting and background
 
-**Android** uses image-based lighting (IBL) and a skybox from two `.ktx` files. Pass both, from assets or URLs:
+**Android** uses image-based lighting (IBL) and a skybox from two `.ktx` files, from assets or URLs. Each one works on its own:
 
 ```dart
 Interactive3d(
@@ -226,7 +226,7 @@ Interactive3d(
 
 Pass both sets in the same widget to cover both platforms. Each platform ignores the other's files.
 
-**Solid background:** `solidBackgroundColor: [0.92, 0.92, 0.92, 1.0]` replaces the background on both platforms. On Android the IBL lighting still applies, as long as both `.ktx` files are passed.
+**Solid background:** `solidBackgroundColor: [0.92, 0.92, 0.92, 1.0]` replaces the background on both platforms. On Android the IBL lighting still applies; only the IBL file is needed.
 
 <details>
 <summary><b>Generate the IBL and skybox files</b></summary>
@@ -287,11 +287,12 @@ Interactive3d(
       bidirectional: true, // neighbours on either side are allowed
     ),
   ],
+  onSelectionRejected: (name) => print('Out of order: $name'),
 )
 ```
 
 - The first part in a group can be any part.
-- After that, only a neighbour of an already selected part is accepted. Other taps are ignored.
+- After that, only a neighbour of an already selected part is accepted. Other taps change nothing and call `onSelectionRejected` with the part name.
 - Deselecting is always allowed, and parts outside every group are never restricted.
 - `tiedGroup` pairs two groups of the same length: once the tied group has started, this group can only start at a part whose position is already selected there.
 
