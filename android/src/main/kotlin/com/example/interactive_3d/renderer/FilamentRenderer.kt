@@ -24,8 +24,8 @@ import java.nio.ByteBuffer
  * main thread; background work is limited to file I/O.
  *
  * Render loop uses [Choreographer] with adaptive frame pacing:
- * full 60 fps during interaction, 30 fps after a brief idle, and fully
- * paused after ~1.5 seconds of no input.
+ * full 60 fps during interaction, 30 fps after a brief idle, and paused
+ * once idle and the latest change has been drawn.
  */
 class FilamentRenderer(
     private val context: Context,
@@ -407,6 +407,8 @@ class FilamentRenderer(
             }
 
             selection.handleTap(entity, asset, eng)
+            // The pick result arrives after a drawn frame, so the highlight needs its own.
+            requestRender()
         }
     }
 
@@ -607,17 +609,20 @@ class FilamentRenderer(
 
     private inner class FrameCallback : Choreographer.FrameCallback {
         private val startTime = System.nanoTime()
-        private var frameCount = 0
+        private var tick = 0
 
         override fun doFrame(frameTimeNanos: Long) {
             if (!isRendering) return
             choreographer.postFrameCallback(this)
 
             // Adaptive frame pacing based on user interaction
+            tick++
             if (!cameraController.isInteracting) {
                 cameraController.idleFrameCount++
-                if (cameraController.idleFrameCount > 90) return       // Fully idle — save battery
-                if (cameraController.idleFrameCount > 30 && frameCount % 2 != 0) return // 30 fps
+                // Fully idle once the last change is drawn; the 600 cap covers a surface that never draws.
+                val drawn = !cameraController.pendingDraw || cameraController.idleFrameCount > 600
+                if (cameraController.idleFrameCount > 90 && drawn) return
+                if (cameraController.idleFrameCount > 30 && tick % 2 != 0) return // 30 fps
             }
 
             val rend = renderer ?: return
@@ -637,7 +642,7 @@ class FilamentRenderer(
                 if (rend.beginFrame(sc, frameTimeNanos)) {
                     rend.render(v)
                     rend.endFrame()
-                    frameCount++
+                    cameraController.pendingDraw = false
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Render error: ${e.message}")
