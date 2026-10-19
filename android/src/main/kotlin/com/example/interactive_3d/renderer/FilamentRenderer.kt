@@ -358,8 +358,7 @@ class FilamentRenderer(
                 bloomOptions = bloomOptions.apply { enabled = this@FilamentRenderer.quality.enableBloom }
             }
 
-            // Remove default emissive now that IBL provides ambient light
-            modelLoader.restoreEmissiveAfterIBL(eng)
+            selection.clearFallbackEmissive(eng)
 
             // Selection manager needs to know IBL state for correct reset behavior
             selection.iblLoaded = true

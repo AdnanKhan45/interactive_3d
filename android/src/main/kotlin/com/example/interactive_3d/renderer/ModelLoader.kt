@@ -115,25 +115,4 @@ internal class ModelLoader {
             }
         }
     }
-
-    /**
-     * After IBL loads, resets emissive factors that were used for default
-     * lighting visibility.
-     */
-    fun restoreEmissiveAfterIBL(engine: Engine) {
-        val asset = currentAsset ?: return
-        val rcm = engine.renderableManager
-
-        asset.entities?.forEach { entity ->
-            if (!rcm.hasComponent(entity)) return@forEach
-            val ri = rcm.getInstance(entity)
-            val count = rcm.getPrimitiveCount(ri)
-            for (i in 0 until count) {
-                try {
-                    rcm.getMaterialInstanceAt(ri, i)
-                        .setParameter("emissiveFactor", 0.0f, 0.0f, 0.0f)
-                } catch (_: Exception) {}
-            }
-        }
-    }
 }

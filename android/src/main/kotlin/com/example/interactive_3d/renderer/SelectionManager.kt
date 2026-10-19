@@ -40,6 +40,9 @@ internal class SelectionManager {
     // Set by the renderer after IBL loads — controls emissive fallback in resetColor
     var iblLoaded = false
 
+    // Entities given the pre-IBL fallback glow, cleared once IBL loads.
+    private val fallbackEmissiveEntities = mutableSetOf<Int>()
+
     // Original material backup for selected/cached entities
     private val originalMaterials = mutableMapOf<Int, MutableMap<Int, MaterialInstance>>()
     private val entitiesWithSelectionColor = mutableSetOf<Int>()
@@ -515,6 +518,7 @@ internal class SelectionManager {
             // No backup exists — reset to default PBR values.
             val count = rcm.getPrimitiveCount(ri)
             val emissiveValue = if (iblLoaded) 0.0f else 0.2f
+            if (!iblLoaded) fallbackEmissiveEntities.add(entity)
             for (i in 0 until count) {
                 try {
                     val mat = rcm.getMaterialInstanceAt(ri, i)
@@ -532,6 +536,31 @@ internal class SelectionManager {
         if (entity !in entitiesWithOverrideApplied) {
             originalMaterials.remove(entity)
         }
+    }
+
+    /**
+     * Removes the fallback glow [resetColor] gave entities before IBL loaded,
+     * leaving glTF and override emissive untouched.
+     */
+    fun clearFallbackEmissive(engine: Engine) {
+        val rcm = engine.renderableManager
+        for (entity in fallbackEmissiveEntities) {
+            if (!rcm.hasComponent(entity)) continue
+            val ri = rcm.getInstance(entity)
+            // The glow went onto the GLB instance: backed up if later highlighted, else still bound.
+            val targets = (originalMaterials[entity]?.values
+                ?: (0 until rcm.getPrimitiveCount(ri)).map { rcm.getMaterialInstanceAt(ri, it) })
+                .toMutableList()
+            // An override duplicated after the glow copied it, unless it sets its own emissive.
+            if (overrideParams[entity]?.containsKey("emissive") != true) {
+                overrideMaterials[entity]?.values?.let { targets += it }
+            }
+            for (mat in targets) {
+                try { mat.setParameter("emissiveFactor", 0.0f, 0.0f, 0.0f) }
+                catch (e: Exception) { Log.w(TAG, "Could not clear fallback emissive: ${e.message}") }
+            }
+        }
+        fallbackEmissiveEntities.clear()
     }
 
     /**
@@ -715,6 +744,7 @@ internal class SelectionManager {
         entitiesWithSelectionColor.clear()
         entitiesWithCacheColor.clear()
         entitiesWithOverrideApplied.clear()
+        fallbackEmissiveEntities.clear()
         overrideParams.clear()
     }
 
