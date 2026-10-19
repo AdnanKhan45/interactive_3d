@@ -478,13 +478,9 @@ class Interactive3dState extends State<Interactive3d> {
       backgroundColor: widget.solidBackgroundColor,
       initialMaterialOverrides: widget.initialMaterialOverrides,
       initialEntityTextures: widget.initialEntityTextures,
+      defaultZoom: _validDefaultZoom,
     );
     if (!mounted) return;
-
-    if (widget.defaultZoom != null) {
-      await setZoom(widget.defaultZoom);
-      if (!mounted) return;
-    }
 
     await _awaitLighting(_platform!.loadEnvironment(
       textureId: _textureId!,
@@ -567,13 +563,15 @@ class Interactive3dState extends State<Interactive3d> {
     }
   }
 
+  /// [Interactive3d.defaultZoom], or null when unset or invalid.
+  double? get _validDefaultZoom {
+    final zoom = widget.defaultZoom;
+    return zoom != null && zoom.isFinite && zoom > 0 ? zoom : null;
+  }
+
   Future<void> resetCamera() async {
     if (_loadPhase != _LoadPhase.loaded) return;
-    // Invalid values were ignored at load, so reset ignores them too.
-    final defaultZoom = widget.defaultZoom;
-    final zoom = defaultZoom != null && defaultZoom.isFinite && defaultZoom > 0
-        ? defaultZoom
-        : null;
+    final zoom = _validDefaultZoom;
     if (Platform.isIOS) {
       await _iosMethodChannel?.invokeMethod('resetCamera', {'zoom': zoom});
     } else {

@@ -127,6 +127,7 @@ class Interactive3dTextureEntry(
         initialMaterialOverrides: List<Map<String, Any>>? = null,
         initialEntityTextures: List<Map<String, Any>>? = null,
         backgroundColor: List<Double>? = null,
+        defaultZoom: Float? = null,
         result: MethodChannel.Result
     ) {
         replyLoad { it.error("LOAD_SUPERSEDED", "A newer model load replaced this one", null) }
@@ -143,7 +144,7 @@ class Interactive3dTextureEntry(
                     buffer, fileName, resources, preselectedEntities,
                     selectionColor, patchColors, enableCache, cacheColor,
                     clearSelectionsOnHighlight, selectionSequence,
-                    initialMaterialOverrides, initialEntityTextures
+                    initialMaterialOverrides, initialEntityTextures, defaultZoom
                 )
                 replyLoad {
                     if (loaded) it.success(null)

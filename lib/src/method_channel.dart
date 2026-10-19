@@ -110,6 +110,7 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
     List<double>? backgroundColor,
     List<MaterialOverride>? initialMaterialOverrides,
     List<EntityTexture>? initialEntityTextures,
+    double? defaultZoom,
   }) async {
     Uint8List modelBytes;
     String modelName;
@@ -152,6 +153,7 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
           initialMaterialOverrides?.map((o) => o.toMap()).toList(),
       'initialEntityTextures':
           initialEntityTextures?.map((t) => t.toMap()).toList(),
+      'defaultZoom': defaultZoom,
     });
   }
 

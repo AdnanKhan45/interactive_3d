@@ -47,6 +47,7 @@ abstract class Interactive3dPlatform extends PlatformInterface {
     List<double>? backgroundColor,
     List<MaterialOverride>? initialMaterialOverrides,
     List<EntityTexture>? initialEntityTextures,
+    double? defaultZoom,
   });
 
   /// Loads IBL lighting and a skybox; either one may be omitted.

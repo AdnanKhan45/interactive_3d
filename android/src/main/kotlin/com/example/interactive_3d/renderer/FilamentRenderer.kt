@@ -253,7 +253,8 @@ class FilamentRenderer(
         clearSelectionsOnHighlight: Boolean = false,
         selectionSequence: List<Map<String, Any>>? = null,
         initialMaterialOverrides: List<Map<String, Any>>? = null,
-        initialEntityTextures: List<Map<String, Any>>? = null
+        initialEntityTextures: List<Map<String, Any>>? = null,
+        defaultZoom: Float? = null
     ): Boolean {
         val eng = engine ?: return false
         val scn = scene ?: return false
@@ -290,6 +291,8 @@ class FilamentRenderer(
         // Fit camera to model
         modelLoader.getBoundingBox()?.let { (center, halfExtent) ->
             cameraController.fitToBoundingBox(center, halfExtent)
+            // Applied here so the first frame with the model is already at the starting zoom.
+            defaultZoom?.let { cameraController.setZoom(it) }
             camera?.let {
                 cameraController.applyProjection(it, width, height)
                 cameraController.applyToCamera(it)

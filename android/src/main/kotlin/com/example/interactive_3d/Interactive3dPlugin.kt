@@ -160,6 +160,7 @@ class Interactive3dPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         initialMaterialOverrides = call.argument("initialMaterialOverrides"),
         initialEntityTextures = call.argument("initialEntityTextures"),
         backgroundColor = backgroundColor,
+        defaultZoom = call.argument<Double>("defaultZoom")?.toFloat(),
         result = result
       )
     } catch (e: Exception) {
