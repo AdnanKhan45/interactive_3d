@@ -101,6 +101,19 @@ void main() {
     expect(calls, isNot(contains('setZoomLevel')));
   });
 
+  testWidgets('sends unselectableEntities with the model load', (tester) async {
+    await pumpViewer(
+      tester,
+      const Interactive3d(
+        modelPath: 'assets/model.glb',
+        loadingWidget: SizedBox(),
+        unselectableEntities: ['Lower_Jaw_L'],
+      ),
+    );
+
+    expect(loadModelArgs!['unselectableEntities'], ['Lower_Jaw_L']);
+  });
+
   testWidgets('treats an invalid defaultZoom as unset at load', (tester) async {
     await pumpViewer(
       tester,

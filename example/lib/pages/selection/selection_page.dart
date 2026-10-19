@@ -16,7 +16,8 @@ class _SelectionPageState extends State<SelectionPage> {
   List<EntityData> _selected = [];
   var _status = const DemoStatus(
     'Ready.',
-    'Tap several parts. Each turns blue and is added to the selection.',
+    'Tap several parts. Each turns blue and is added to the selection. '
+        'Tapping the jaws does nothing.',
   );
 
   Future<void> _unselectLast() async {
@@ -48,6 +49,8 @@ class _SelectionPageState extends State<SelectionPage> {
       howTo: 'Tapping a named part selects it; tapping it again deselects '
           'it. onSelectionChanged reports the full selection (id and name) '
           'after every change.\n\n'
+          'The jaws are listed in unselectableEntities, so tapping them '
+          'does nothing.\n\n'
           'The controller can unselect specific parts by id or clear '
           'everything.',
       viewer: Interactive3d(
@@ -58,6 +61,7 @@ class _SelectionPageState extends State<SelectionPage> {
         iOSBackgroundEnvPath: DemoAssets.bridgeHdr,
         defaultZoom: 2,
         selectionColor: DemoAssets.selectionBlue,
+        unselectableEntities: DemoAssets.jaws,
         onSelectionChanged: (entities) => setState(() => _selected = entities),
       ),
       chips: [

@@ -124,6 +124,7 @@ class Interactive3dTextureEntry(
         patchColors: List<Map<String, Any>>?, enableCache: Boolean, cacheColor: List<Double>?,
         clearSelectionsOnHighlight: Boolean = false,
         selectionSequence: List<Map<String, Any>>? = null,
+        unselectableEntities: List<String>? = null,
         initialMaterialOverrides: List<Map<String, Any>>? = null,
         initialEntityTextures: List<Map<String, Any>>? = null,
         backgroundColor: List<Double>? = null,
@@ -143,7 +144,7 @@ class Interactive3dTextureEntry(
                 val loaded = renderer.loadModel(
                     buffer, fileName, resources, preselectedEntities,
                     selectionColor, patchColors, enableCache, cacheColor,
-                    clearSelectionsOnHighlight, selectionSequence,
+                    clearSelectionsOnHighlight, selectionSequence, unselectableEntities,
                     initialMaterialOverrides, initialEntityTextures, defaultZoom
                 )
                 replyLoad {

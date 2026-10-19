@@ -59,6 +59,11 @@ class Interactive3d extends StatefulWidget {
   /// Entity names to highlight when the model first loads.
   final List<String>? preselectedEntities;
 
+  /// Part names that ignore taps: no highlight and no selection event.
+  /// Names match those in [onSelectionChanged] on the same platform.
+  /// Read once when the model loads.
+  final List<String>? unselectableEntities;
+
   /// Default highlight color for selected entities. RGBA 0.0–1.0.
   final List<double>? selectionColor;
 
@@ -130,6 +135,7 @@ class Interactive3d extends StatefulWidget {
     this.onSelectionChanged,
     this.resources = const [],
     this.preselectedEntities,
+    this.unselectableEntities,
     this.selectionColor,
     this.defaultZoom,
     this.solidBackgroundColor,
@@ -369,6 +375,7 @@ class Interactive3dState extends State<Interactive3d> {
         'clearSelectionsOnHighlight': widget.clearSelectionOnHighlight,
         'selectionSequence':
             widget.selectionSequence?.map((c) => c.toJson()).toList(),
+        'unselectableEntities': widget.unselectableEntities,
         'backgroundColor': widget.solidBackgroundColor,
         'initialMaterialOverrides':
             widget.initialMaterialOverrides?.map((o) => o.toMap()).toList(),
@@ -487,6 +494,7 @@ class Interactive3dState extends State<Interactive3d> {
       cacheColor: widget.cacheColor,
       clearSelectionsOnHighlight: widget.clearSelectionOnHighlight,
       selectionSequence: widget.selectionSequence,
+      unselectableEntities: widget.unselectableEntities,
       backgroundColor: widget.solidBackgroundColor,
       initialMaterialOverrides: widget.initialMaterialOverrides,
       initialEntityTextures: widget.initialEntityTextures,

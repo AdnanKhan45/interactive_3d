@@ -22,6 +22,8 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
 
     // State
     private var pendingPreselectedEntities: [String]?
+    /// Part names whose taps are ignored before any selection change.
+    private var unselectableNames: Set<String> = []
     private var pendingInitialOverrides: [[String: Any]]?
     private var pendingInitialTextures: [[String: Any]]?
     private var isDisposed = false
@@ -143,6 +145,8 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
         pendingPreselectedEntities = args["preselectedEntities"] as? [String]
         pendingInitialOverrides = args["initialMaterialOverrides"] as? [[String: Any]]
         pendingInitialTextures = args["initialEntityTextures"] as? [[String: Any]]
+
+        unselectableNames = Set(args["unselectableEntities"] as? [String] ?? [])
 
         // Configure sequence
         if let seqArray = args["selectionSequence"] as? [[String: Any]] {
@@ -351,6 +355,8 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
 
         guard let nameNode = targetNode, let nodeName = nameNode.name else { return }
         guard let geometryNode = selection.findGeometryNode(in: nameNode) else { return }
+
+        if unselectableNames.contains(nodeName) { return }
 
         // Sequence validation
         guard sequenceValidator.isTapAllowed(nodeName, selectedNodes: selection.selectedNodes) else {

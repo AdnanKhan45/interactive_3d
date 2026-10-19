@@ -254,6 +254,7 @@ Interactive3d(
   modelPath: 'assets/models/Tooth-3.glb',
   selectionColor: [0.0, 0.6, 1.0, 1.0], // RGBA
   preselectedEntities: ['Teeth_Lower_1', 'Teeth_Lower_2'],
+  unselectableEntities: ['Upper_Jaw_L', 'Upper_Jaw_R'], // taps do nothing
   patchColors: [
     // A different highlight color for specific parts.
     PatchColor(name: 'Lower_Jaw_L', color: [1.0, 0.5, 0.0, 1.0]),
@@ -265,6 +266,8 @@ Interactive3d(
 ```
 
 Use `name` to identify parts. The `id` is platform-specific and can change between sessions.
+
+Taps on parts in `unselectableEntities` do nothing, so they never flash. They can still be selected with `preselectedEntities` and cleared from the controller.
 
 From the controller:
 
