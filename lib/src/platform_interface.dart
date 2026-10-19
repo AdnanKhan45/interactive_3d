@@ -137,4 +137,7 @@ abstract class Interactive3dPlatform extends PlatformInterface {
 
   /// Stream of cache selection changes for a given texture.
   Stream<List<String>> cacheSelectionStream(int textureId);
+
+  /// Stream of part names whose taps the selection sequence rejected.
+  Stream<String> selectionRejectedStream(int textureId);
 }

@@ -89,6 +89,10 @@ class Interactive3d extends StatefulWidget {
   /// Ordered selection rules that constrain which entities can be tapped next.
   final List<SequenceConfig>? selectionSequence;
 
+  /// Called with the part name when [selectionSequence] rejects a tap.
+  /// Names match those in [onSelectionChanged] on the same platform.
+  final void Function(String name)? onSelectionRejected;
+
   /// Background color shown while the model is loading.
   final Color backgroundColor;
 
@@ -136,6 +140,7 @@ class Interactive3d extends StatefulWidget {
     this.onCacheSelectionChanged,
     this.clearSelectionOnHighlight = false,
     this.selectionSequence,
+    this.onSelectionRejected,
     this.backgroundColor = Colors.black,
     this.loadingWidget,
     this.errorBuilder,
@@ -171,6 +176,7 @@ class Interactive3dState extends State<Interactive3d> {
   Object? _loadError;
   StreamSubscription<List<EntityData>>? _selectionSubscription;
   StreamSubscription<List<String>>? _cacheSelectionSubscription;
+  StreamSubscription<String>? _selectionRejectedSubscription;
   Size? _currentSize;
 
   @override
@@ -311,6 +317,8 @@ class Interactive3dState extends State<Interactive3d> {
         final List<dynamic> cached = map['cachedEntities'];
         final names = cached.map<String>((e) => e['name'] as String).toList();
         widget.onCacheSelectionChanged?.call(names);
+      } else if (eventType == 'selectionRejected') {
+        widget.onSelectionRejected?.call(map['name'] as String);
       }
     });
 
@@ -445,6 +453,10 @@ class Interactive3dState extends State<Interactive3d> {
             .cacheSelectionStream(_textureId!)
             .listen(widget.onCacheSelectionChanged!);
       }
+
+      _selectionRejectedSubscription = _platform!
+          .selectionRejectedStream(_textureId!)
+          .listen((name) => widget.onSelectionRejected?.call(name));
 
       await _loadAndroidModelAndEnvironment();
     } catch (e, stackTrace) {
@@ -752,6 +764,7 @@ class Interactive3dState extends State<Interactive3d> {
   void dispose() {
     _selectionSubscription?.cancel();
     _cacheSelectionSubscription?.cancel();
+    _selectionRejectedSubscription?.cancel();
     _iosEventSubscription?.cancel();
     widget.controller?.detach(this);
 

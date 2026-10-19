@@ -287,11 +287,12 @@ Interactive3d(
       bidirectional: true, // neighbours on either side are allowed
     ),
   ],
+  onSelectionRejected: (name) => print('Out of order: $name'),
 )
 ```
 
 - The first part in a group can be any part.
-- After that, only a neighbour of an already selected part is accepted. Other taps are ignored.
+- After that, only a neighbour of an already selected part is accepted. Other taps change nothing and call `onSelectionRejected` with the part name.
 - Deselecting is always allowed, and parts outside every group are never restricted.
 - `tiedGroup` pairs two groups of the same length: once the tied group has started, this group can only start at a part whose position is already selected there.
 

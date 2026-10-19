@@ -19,6 +19,7 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
   final Map<int, StreamController<List<EntityData>>> _selectionControllers = {};
   final Map<int, StreamController<List<String>>> _cacheSelectionControllers =
       {};
+  final Map<int, StreamController<String>> _selectionRejectedControllers = {};
 
   @override
   Future<Map<String, dynamic>> createTexture({
@@ -40,8 +41,10 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
   Future<void> disposeTexture(int textureId) async {
     _selectionControllers[textureId]?.close();
     _cacheSelectionControllers[textureId]?.close();
+    _selectionRejectedControllers[textureId]?.close();
     _selectionControllers.remove(textureId);
     _cacheSelectionControllers.remove(textureId);
+    _selectionRejectedControllers.remove(textureId);
     _eventChannels.remove(textureId);
 
     await _pluginChannel.invokeMethod('disposeTexture', {
@@ -63,6 +66,7 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
     _eventChannels[textureId] = eventChannel;
     _selectionControllers[textureId] = StreamController.broadcast();
     _cacheSelectionControllers[textureId] = StreamController.broadcast();
+    _selectionRejectedControllers[textureId] = StreamController.broadcast();
 
     eventChannel.receiveBroadcastStream().listen((event) {
       _onEvent(textureId, event);
@@ -83,6 +87,8 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
       final List<dynamic> cached = map['cachedEntities'];
       final names = cached.map<String>((e) => e['name'] as String).toList();
       _cacheSelectionControllers[textureId]?.add(names);
+    } else if (eventType == 'selectionRejected') {
+      _selectionRejectedControllers[textureId]?.add(map['name'] as String);
     }
   }
 
@@ -93,6 +99,10 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
   @override
   Stream<List<String>> cacheSelectionStream(int textureId) =>
       _cacheSelectionControllers[textureId]?.stream ?? const Stream.empty();
+
+  @override
+  Stream<String> selectionRejectedStream(int textureId) =>
+      _selectionRejectedControllers[textureId]?.stream ?? const Stream.empty();
 
   @override
   Future<void> loadModel({

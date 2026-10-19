@@ -37,7 +37,8 @@ class _SequencePageState extends State<SequencePage> {
           '- The first tooth in a group can be any tooth.\n'
           '- After that, only a neighbour of a selected tooth is accepted '
           '(either side, because bidirectional is true).\n'
-          '- Out-of-order taps are ignored and nothing changes.\n'
+          '- Out-of-order taps change nothing and call onSelectionRejected '
+          'with the part name.\n'
           '- Deselecting is always allowed. Parts outside the groups are '
           'never restricted.',
       viewer: Interactive3d(
@@ -65,9 +66,15 @@ class _SequencePageState extends State<SequencePage> {
           if (entities.isNotEmpty) {
             _status = const DemoStatus(
               'Selection changed.',
-              'Try a tooth two places away: it should be ignored.',
+              'Try a tooth two places away: it should be rejected.',
             );
           }
+        }),
+        onSelectionRejected: (name) => setState(() {
+          _status = DemoStatus(
+            'Rejected $name.',
+            'Out of order, so the selection stayed the same.',
+          );
         }),
       ),
       chips: [
