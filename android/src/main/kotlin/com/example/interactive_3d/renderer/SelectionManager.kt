@@ -514,8 +514,8 @@ internal class SelectionManager {
             if (overrideMaterials.containsKey(entity)) {
                 entitiesWithOverrideApplied.add(entity)
             }
-        } else {
-            // No backup exists — reset to default PBR values.
+        } else if (!overrideMaterials.containsKey(entity)) {
+            // Only the GLB instance is reset; mutating a bound override would wipe the app's color.
             val count = rcm.getPrimitiveCount(ri)
             val emissiveValue = if (iblLoaded) 0.0f else 0.2f
             if (!iblLoaded) fallbackEmissiveEntities.add(entity)
