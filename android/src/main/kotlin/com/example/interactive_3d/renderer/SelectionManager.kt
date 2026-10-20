@@ -47,7 +47,8 @@ internal class SelectionManager {
     private val originalMaterials = mutableMapOf<Int, MutableMap<Int, MaterialInstance>>()
     private val entitiesWithSelectionColor = mutableSetOf<Int>()
     private val entitiesWithCacheColor = mutableSetOf<Int>()
-    private val createdInstances = mutableListOf<MaterialInstance>()
+    // Selection and cache instances by entity and primitive index, freed once replaced.
+    private val highlightInstances = mutableMapOf<Int, MutableMap<Int, MaterialInstance>>()
 
     // Cache
     var enableCache = false
@@ -131,10 +132,11 @@ internal class SelectionManager {
 
         // Create solid-color instances
         for (i in 0 until count) {
+            var created: MaterialInstance? = null
             try {
                 val originalMat = originalMaterials[entity]?.get(i)
                     ?: rcm.getMaterialInstanceAt(ri, i)
-                val selectionMat = originalMat.material.createInstance()
+                val selectionMat = originalMat.material.createInstance().also { created = it }
 
                 // Disable texture sampling so baseColorFactor is the sole color source
                 selectionMat.setParameter("baseColorIndex", -1)
@@ -148,9 +150,10 @@ internal class SelectionManager {
                 selectionMat.setParameter("roughnessFactor", 1.0f)
 
                 rcm.setMaterialInstanceAt(ri, i, selectionMat)
-                createdInstances.add(selectionMat)
+                trackHighlight(entity, i, selectionMat, engine)
             } catch (e: Exception) {
                 Log.w(TAG, "Could not apply selection color: ${e.message}")
+                created?.takeIf { highlightInstances[entity]?.get(i) !== it }?.let { destroyInstance(it, engine) }
             }
         }
         entitiesWithSelectionColor.add(entity)
@@ -182,10 +185,11 @@ internal class SelectionManager {
 
         // Create new cache-colored instances
         for (i in 0 until count) {
+            var created: MaterialInstance? = null
             try {
                 val originalMat = originalMaterials[entity]?.get(i)
                     ?: rcm.getMaterialInstanceAt(ri, i)
-                val cacheMat = originalMat.material.createInstance()
+                val cacheMat = originalMat.material.createInstance().also { created = it }
 
                 // Disable texture sampling so cacheColor is the sole color source
                 cacheMat.setParameter("baseColorIndex", -1)
@@ -199,9 +203,10 @@ internal class SelectionManager {
                 cacheMat.setParameter("roughnessFactor", 0.7f)
 
                 rcm.setMaterialInstanceAt(ri, i, cacheMat)
-                createdInstances.add(cacheMat)
+                trackHighlight(entity, i, cacheMat, engine)
             } catch (e: Exception) {
                 Log.w(TAG, "Could not apply cache color: ${e.message}")
+                created?.takeIf { highlightInstances[entity]?.get(i) !== it }?.let { destroyInstance(it, engine) }
             }
         }
         entitiesWithCacheColor.add(entity)
@@ -259,8 +264,10 @@ internal class SelectionManager {
         if (entity in entitiesWithSelectionColor) return
 
         for ((idx, mat) in mats) {
-            try { rcm.setMaterialInstanceAt(ri, idx, mat) }
-            catch (e: Exception) { Log.w(TAG, "Could not apply override: ${e.message}") }
+            try {
+                rcm.setMaterialInstanceAt(ri, idx, mat)
+                releaseHighlight(entity, idx, engine)
+            } catch (e: Exception) { Log.w(TAG, "Could not apply override: ${e.message}") }
         }
         entitiesWithOverrideApplied.add(entity)
         entitiesWithCacheColor.remove(entity)
@@ -520,8 +527,10 @@ internal class SelectionManager {
             val restoreTo = overrideMaterials[entity] ?: originalMaterials[entity]
             if (restoreTo != null) {
                 for ((idx, mat) in restoreTo) {
-                    try { rcm.setMaterialInstanceAt(ri, idx, mat) }
-                    catch (e: Exception) { Log.w(TAG, "Could not restore material: ${e.message}") }
+                    try {
+                        rcm.setMaterialInstanceAt(ri, idx, mat)
+                        releaseHighlight(entity, idx, engine)
+                    } catch (e: Exception) { Log.w(TAG, "Could not restore material: ${e.message}") }
                 }
             }
             entitiesWithSelectionColor.remove(entity)
@@ -736,24 +745,39 @@ internal class SelectionManager {
 
     // -- Cleanup --
 
-    /**
-     * Destroys all created material instances and clears tracking state.
-     */
-    fun destroyCreatedInstances(engine: Engine) {
-        createdInstances.forEach { mat ->
-            try { engine.destroyMaterialInstance(mat) }
-            catch (e: Exception) { Log.w(TAG, "Failed to destroy MaterialInstance: ${e.message}") }
+    /** Frees selection and cache instances; the caller must unbind them first. */
+    private fun destroyHighlightInstances(engine: Engine) {
+        highlightInstances.values.forEach { primitives ->
+            primitives.values.forEach { destroyInstance(it, engine) }
         }
-        createdInstances.clear()
+        highlightInstances.clear()
     }
 
-    /**
-     * Resets all selection and override state. Call before loading a new model.
-     */
-    fun reset(engine: Engine) {
+    /** Records [mat] as bound at [idx] and frees the highlight it replaced there. */
+    private fun trackHighlight(entity: Int, idx: Int, mat: MaterialInstance, engine: Engine) {
+        highlightInstances.getOrPut(entity) { mutableMapOf() }.put(idx, mat)
+            // A failed backup can leave the old highlight recorded as the original; keep it then.
+            ?.takeIf { originalMaterials[entity]?.containsValue(it) != true }
+            ?.let { destroyInstance(it, engine) }
+    }
+
+    /** Frees the highlight at [idx]; call only after another instance is bound there. */
+    private fun releaseHighlight(entity: Int, idx: Int, engine: Engine) {
+        val primitives = highlightInstances[entity] ?: return
+        primitives.remove(idx)?.let { destroyInstance(it, engine) }
+        if (primitives.isEmpty()) highlightInstances.remove(entity)
+    }
+
+    private fun destroyInstance(mat: MaterialInstance, engine: Engine) {
+        try { engine.destroyMaterialInstance(mat) }
+        catch (e: Exception) { Log.w(TAG, "Failed to destroy MaterialInstance: ${e.message}") }
+    }
+
+    /** Destroys all selection and override state; [cleanup] unbinds everything first. */
+    private fun reset(engine: Engine) {
         selectedEntities.clear()
         entityVisibilities.clear()
-        destroyCreatedInstances(engine)
+        destroyHighlightInstances(engine)
         destroyOverrideInstances(engine)
         destroyOverrideTextures(engine)
         originalMaterials.clear()
