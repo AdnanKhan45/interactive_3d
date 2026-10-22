@@ -1,3 +1,10 @@
+## 2.5.0
+
+* 19th release of `interactive_3d`: **Unselectable Parts** 🚫
+- New `unselectableEntities` widget param: taps on the parts you list do nothing on Android and iOS, with no highlight flash and no selection event. They can still be selected from code.
+- Android memory fix: selection and cache highlights no longer stay in memory until the model closes, so long tapping sessions stop growing memory.
+- Try it out from the **Tap to select** page in the example app, where the jaws are unselectable.
+
 ## 2.4.0
 
 * 18th release of `interactive_3d`: **Steadier Android and Rejected Taps** 🛠️

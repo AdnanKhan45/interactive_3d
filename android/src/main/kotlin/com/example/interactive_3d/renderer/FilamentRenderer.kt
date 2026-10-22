@@ -61,6 +61,9 @@ class FilamentRenderer(
     // Notified when a tap is rejected by sequence validation
     private var onSelectionRejected: ((String) -> Unit)? = null
 
+    // Parts whose taps are ignored before any selection change
+    private var unselectableNames: Set<String> = emptySet()
+
     // Device-adaptive settings
     private val deviceTier: DeviceCapability.Tier
     private val quality: DeviceCapability.QualitySettings
@@ -252,6 +255,7 @@ class FilamentRenderer(
         cacheColor: List<Double>?,
         clearSelectionsOnHighlight: Boolean = false,
         selectionSequence: List<Map<String, Any>>? = null,
+        unselectableEntities: List<String>? = null,
         initialMaterialOverrides: List<Map<String, Any>>? = null,
         initialEntityTextures: List<Map<String, Any>>? = null,
         defaultZoom: Float? = null
@@ -271,6 +275,8 @@ class FilamentRenderer(
         selection.patchColors = patchColors
         selection.enableCache = enableCache
         selection.clearSelectionsOnHighlight = clearSelectionsOnHighlight
+
+        unselectableNames = unselectableEntities?.toSet() ?: emptySet()
 
         // Configure sequence validation (active whenever the list is non-empty)
         if (selectionSequence != null) {
@@ -394,8 +400,10 @@ class FilamentRenderer(
 
             val eng = engine ?: return@pick
 
-            // Sequence validation — mirror iOS Interactive3dView.handleTap
             val nodeName = asset.getName(entity)
+            if (nodeName != null && nodeName in unselectableNames) return@pick
+
+            // Must run before handleTap mutates the selection.
             if (nodeName != null) {
                 val selectedNames = selection.selectedEntities
                     .mapNotNull { asset.getName(it) }

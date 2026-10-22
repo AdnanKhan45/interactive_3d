@@ -117,6 +117,7 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
     List<double>? cacheColor,
     bool clearSelectionsOnHighlight = false,
     List<SequenceConfig>? selectionSequence,
+    List<String>? unselectableEntities,
     List<double>? backgroundColor,
     List<MaterialOverride>? initialMaterialOverrides,
     List<EntityTexture>? initialEntityTextures,
@@ -158,6 +159,7 @@ class MethodChannelInteractive3d extends Interactive3dPlatform {
       'cacheColor': cacheColor,
       'clearSelectionsOnHighlight': clearSelectionsOnHighlight,
       'selectionSequence': selectionSequence?.map((c) => c.toJson()).toList(),
+      'unselectableEntities': unselectableEntities,
       'backgroundColor': backgroundColor,
       'initialMaterialOverrides':
           initialMaterialOverrides?.map((o) => o.toMap()).toList(),

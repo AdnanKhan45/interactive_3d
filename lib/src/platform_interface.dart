@@ -44,6 +44,7 @@ abstract class Interactive3dPlatform extends PlatformInterface {
     List<double>? cacheColor,
     bool clearSelectionsOnHighlight = false,
     List<SequenceConfig>? selectionSequence,
+    List<String>? unselectableEntities,
     List<double>? backgroundColor,
     List<MaterialOverride>? initialMaterialOverrides,
     List<EntityTexture>? initialEntityTextures,
