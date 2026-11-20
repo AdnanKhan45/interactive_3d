@@ -387,6 +387,11 @@ class Interactive3dPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         val dy = call.argument<Double>("deltaY")?.toFloat()
         if (dx != null && dy != null) entry.onPan(dx, dy)
       }
+      "translate" -> {
+        val dx = call.argument<Double>("deltaX")?.toFloat()
+        val dy = call.argument<Double>("deltaY")?.toFloat()
+        if (dx != null && dy != null) entry.onTranslate(dx, dy)
+      }
       "scale" -> {
         val s = call.argument<Double>("scale")?.toFloat()
         if (s != null) entry.onScale(s)

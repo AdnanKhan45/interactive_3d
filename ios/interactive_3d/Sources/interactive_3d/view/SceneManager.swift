@@ -132,6 +132,36 @@ class SceneManager {
         frame(zoom: next, fromFront: false, framing: framing)
     }
 
+    /// Two-finger drag: moves the camera and its orbit target together in the
+    /// camera plane, so the model follows the fingers. [translation] is the drag
+    /// since the last call, in view points. Moves add up across gestures; the
+    /// target stays inside the model bounds, so the model cannot be lost.
+    func translate(by translation: CGPoint) {
+        guard let view = scnView, let scene = view.scene,
+              let pov = view.pointOfView, let camera = pov.camera,
+              let (lower, upper) = geometryBounds(of: scene) else { return }
+        let height = Float(view.bounds.height)
+        guard height > 0 else { return }
+
+        let controller = view.defaultCameraController
+        let target = simd_float3(controller.target)
+        let distance = simd_distance(pov.simdWorldPosition, target)
+        guard distance > 0 else { return }
+        // World units covered by one point at the target's distance.
+        let fov = Float(camera.fieldOfView) * .pi / 180
+        let worldPerPoint = 2 * distance * tan(fov / 2) / height
+
+        // The content follows the fingers, so camera and target move the other way.
+        let move = -pov.simdWorldRight * Float(translation.x) * worldPerPoint
+            + pov.simdWorldUp * Float(translation.y) * worldPerPoint
+        let newTarget = simd_clamp(target + move, lower, upper)
+        controller.stopInertia()
+        pov.simdWorldPosition += newTarget - target
+        controller.target = SCNVector3(newTarget)
+        // SceneKit's default camera is outside the scene graph: ask for a frame.
+        view.setNeedsDisplay()
+    }
+
     /// Saves the starting view once SceneKit has created its camera.
     /// Returns false while there is no camera yet.
     func captureHomePose() -> Bool {

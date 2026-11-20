@@ -27,6 +27,7 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
     private var pendingInitialOverrides: [[String: Any]]?
     private var pendingInitialTextures: [[String: Any]]?
     private var isDisposed = false
+    private weak var twoFingerPan: UIPanGestureRecognizer?
 
     // Answered exactly once, on main: first drawn frame, timeout, newer load, or cleanup.
     private var pendingLoadResult: FlutterResult?
@@ -66,6 +67,18 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
 
         let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
         scnView.addGestureRecognizer(tapGesture)
+
+        // Two fingers move the view (SceneManager.translate). SceneKit keeps one-finger
+        // orbit and pinch zoom; its own pan is limited to one finger, since with
+        // allowsTranslation off it turned a two-finger drag into a rotation.
+        limitSceneKitPanToOneFinger()
+        let twoFingerPan = UIPanGestureRecognizer(
+            target: self, action: #selector(handleTwoFingerPan(_:)))
+        twoFingerPan.minimumNumberOfTouches = 2
+        twoFingerPan.maximumNumberOfTouches = 2
+        twoFingerPan.delegate = self
+        scnView.addGestureRecognizer(twoFingerPan)
+        self.twoFingerPan = twoFingerPan
 
         scnView.scene = SCNScene()
     }
@@ -201,6 +214,8 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
             do {
                 try self.sceneManager.loadModel(
                     modelBytes: modelBytes, name: modelName, resources: resources)
+                // SceneKit may install its camera recognizers late: limit them again.
+                self.limitSceneKitPanToOneFinger()
 
                 // Apply initial overrides before cache/preselections so override
                 // is the deselect target underneath any selection layered above.
@@ -335,6 +350,27 @@ class Interactive3DPlatformView: NSObject, FlutterPlatformView, FlutterStreamHan
     }
 
     // MARK: - Tap Handling
+
+    /// Limits SceneKit's own camera pan recognizers to one finger.
+    private func limitSceneKitPanToOneFinger() {
+        for case let pan as UIPanGestureRecognizer in scnView.gestureRecognizers ?? []
+        where pan !== twoFingerPan {
+            pan.maximumNumberOfTouches = 1
+        }
+    }
+
+    @objc private func handleTwoFingerPan(_ gesture: UIPanGestureRecognizer) {
+        switch gesture.state {
+        case .began:
+            limitSceneKitPanToOneFinger()
+            gesture.setTranslation(.zero, in: scnView)
+        case .changed:
+            sceneManager.translate(by: gesture.translation(in: scnView))
+            gesture.setTranslation(.zero, in: scnView)
+        default:
+            break
+        }
+    }
 
     @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
         let location = gesture.location(in: scnView)
@@ -635,5 +671,18 @@ extension Interactive3DPlatformView: SCNSceneRendererDelegate {
             }
             self.updateFrameListener()
         }
+    }
+}
+
+// MARK: - Two-finger pan
+
+extension Interactive3DPlatformView: UIGestureRecognizerDelegate {
+    /// The two-finger pan runs together with SceneKit's pinch, so zooming and
+    /// moving in the same gesture both work.
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        return gestureRecognizer === twoFingerPan && otherGestureRecognizer is UIPinchGestureRecognizer
     }
 }
