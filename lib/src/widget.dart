@@ -583,12 +583,13 @@ class Interactive3dState extends State<Interactive3d> {
         ? Offset.zero
         : details.localFocalPoint - _lastFocalPoint!;
     final scaleStep = _lastScale > 0 ? details.scale / _lastScale : 1.0;
-    _lastFocalPoint = details.localFocalPoint;
     _lastScale = details.scale;
+    // _lastFocalPoint only advances when a move is sent, so slow drags whose
+    // per-event steps stay under the dispatch threshold still add up.
 
     if (details.pointerCount < 2) {
       // One finger orbits.
-      if (focalDelta.distance > 0.5) _sendDelta('pan', focalDelta);
+      _sendDeltaIfMoved('pan', focalDelta, details.localFocalPoint);
       return;
     }
 
@@ -600,19 +601,31 @@ class Interactive3dState extends State<Interactive3d> {
       } else if (moved > _panLockDistance) {
         _twoFingerMode = _TwoFingerMode.pan;
       } else {
+        // Movement before the mode is picked is not applied: follow the fingers
+        // so that picking pan does not replay it as one jump.
+        _lastFocalPoint = details.localFocalPoint;
         return;
       }
     }
 
     if (_twoFingerMode == _TwoFingerMode.zoom) {
+      _lastFocalPoint = details.localFocalPoint;
       if (scaleStep != 1.0) {
         _platform!.onTouchEvent(
             textureId: _textureId!, action: 'scale', scale: scaleStep);
       }
-    } else if (focalDelta.distance > 0.5) {
+    } else {
       // Two fingers move the view: the model follows them.
-      _sendDelta('translate', focalDelta);
+      _sendDeltaIfMoved('translate', focalDelta, details.localFocalPoint);
     }
+  }
+
+  /// Sends [delta] once it is big enough and only then moves the baseline to
+  /// [focal]; smaller deltas keep adding up instead of being dropped.
+  void _sendDeltaIfMoved(String action, Offset delta, Offset focal) {
+    if (delta.distance <= 0.5) return;
+    _sendDelta(action, delta);
+    _lastFocalPoint = focal;
   }
 
   void _sendDelta(String action, Offset delta) {
