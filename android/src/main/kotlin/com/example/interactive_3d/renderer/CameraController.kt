@@ -192,15 +192,35 @@ internal class CameraController {
         // The content follows the fingers, so the target moves the other way.
         val moveRight = -deltaX * worldPerPixel
         val moveUp = deltaY * worldPerPixel
-        targetPosition = FloatArray(3) { i ->
-            val r = if (i == 0) rx else if (i == 2) rz else 0f
-            val u = if (i == 0) ux else if (i == 1) uy else uz
-            (targetPosition[i] + r * moveRight + u * moveUp).coerceIn(
-                boundsCenter[i] - boundsHalfExtent[i],
-                boundsCenter[i] + boundsHalfExtent[i],
-            )
-        }
+        val rightPart = floatArrayOf(rx * moveRight, 0f, rz * moveRight)
+        val upPart = floatArrayOf(ux * moveUp, uy * moveUp, uz * moveUp)
+        val fullMove = FloatArray(3) { i -> rightPart[i] + upPart[i] }
+
+        // Full move first; when a bound shortens it, also try sliding along just the
+        // camera's up or right axis and keep the longest. All three stay in the
+        // camera plane, so a drag along a side bound still moves instead of stopping.
+        val applied = listOf(fullMove, upPart, rightPart)
+            .map { clipMove(it) }
+            .maxByOrNull { it[0] * it[0] + it[1] * it[1] + it[2] * it[2] }
+            ?: return false
+        targetPosition = FloatArray(3) { i -> targetPosition[i] + applied[i] }
         return true
+    }
+
+    /**
+     * Shortens [move] by one factor in 0..1 so the target stays inside the model
+     * bounds, keeping its direction (and so the camera plane). Clamping each axis
+     * would bend it and add depth. Axes already outside can only move back in.
+     */
+    private fun clipMove(move: FloatArray): FloatArray {
+        var scale = 1f
+        for (i in 0..2) {
+            if (move[i] == 0f) continue
+            val limit = boundsCenter[i] +
+                if (move[i] > 0f) boundsHalfExtent[i] else -boundsHalfExtent[i]
+            scale = minOf(scale, maxOf((limit - targetPosition[i]) / move[i], 0f))
+        }
+        return FloatArray(3) { i -> move[i] * scale }
     }
 
     /**
