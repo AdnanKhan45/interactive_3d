@@ -5,6 +5,8 @@ import android.os.Looper
 import com.google.android.filament.Camera
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.math.sqrt
+import kotlin.math.tan
 
 /**
  * Controls the orbit camera around the 3D model.
@@ -25,7 +27,8 @@ internal class CameraController {
         private const val FAR_PLANE = 1000.0
         private const val THROTTLE_MS = 8L
         private const val MIN_ZOOM = 0.5f
-        private const val MAX_ZOOM = 3.0f
+        // Pinch can zoom in far enough to look at details of tall models (was 3.0).
+        private const val MAX_ZOOM = 10.0f
     }
 
     // Spherical orbit state
@@ -39,6 +42,10 @@ internal class CameraController {
         private set
     var zoomLevel = 1.0f
         private set
+
+    // Model bounds, used to keep a translated target inside the model.
+    private var boundsCenter = floatArrayOf(0f, 0f, 0f)
+    private var boundsHalfExtent = floatArrayOf(0f, 0f, 0f)
 
     // Adaptive frame pacing
     var isInteracting = false
@@ -100,6 +107,8 @@ internal class CameraController {
      */
     fun fitToBoundingBox(center: FloatArray, halfExtent: FloatArray) {
         targetPosition = floatArrayOf(center[0], center[1], center[2])
+        boundsCenter = center.copyOf()
+        boundsHalfExtent = halfExtent.copyOf()
 
         val maxExtent = maxOf(halfExtent[0], halfExtent[1], halfExtent[2])
         val targetWorldSize = 2.0f
@@ -146,18 +155,88 @@ internal class CameraController {
     }
 
     /**
-     * Handles a pinch-to-zoom gesture. Returns true if the camera was updated.
+     * Handles a two-finger drag: moves the orbit target (and so the camera) in the
+     * camera's screen plane, so the model follows the fingers. Deltas are in render
+     * pixels, [viewportHeight] is the render height. Moves add up across gestures;
+     * the target stays inside the model's bounding box, so the model cannot be lost.
+     * Returns true if the camera was updated.
      */
-    fun onScale(scale: Float): Boolean {
-        if (!shouldUpdate()) return false
+    fun onTranslate(deltaX: Float, deltaY: Float, viewportHeight: Int): Boolean {
+        if (viewportHeight <= 0) return false
+        // No throttle here: a dropped event would lose its share of the drag (touch
+        // events arrive every ~8 ms at 120 Hz), so the view would lag the fingers.
+        // Moving the target is cheap. The shared throttle is not used either, since a
+        // two-finger drag sends a scale event right before each translate.
         markInteracting()
 
-        val factor = if (scale > 1.0f) {
-            1.0f + (scale - 1.0f) * 0.15f
-        } else {
-            1.0f - (1.0f - scale) * 0.15f
+        // World units covered by one pixel at the target's distance.
+        val distance = orbitRadius / zoomLevel
+        val fov = Math.toRadians(DEFAULT_FOV / zoomLevel)
+        val worldPerPixel = (2.0 * distance * tan(fov / 2.0) / viewportHeight).toFloat()
+
+        // Camera axes from the orbit angles: forward points from the eye to the target.
+        val fx = -(cos(orbitAngleX) * sin(orbitAngleY))
+        val fy = -sin(orbitAngleX)
+        val fz = -(cos(orbitAngleX) * cos(orbitAngleY))
+        // right = forward x worldUp, up = right x forward
+        var rx = -fz
+        var rz = fx
+        val rLen = sqrt(rx * rx + rz * rz)
+        if (rLen < 1e-6f) return false
+        rx /= rLen
+        rz /= rLen
+        val ux = -rz * fy
+        val uy = rz * fx - rx * fz
+        val uz = rx * fy
+
+        // The content follows the fingers, so the target moves the other way.
+        val moveRight = -deltaX * worldPerPixel
+        val moveUp = deltaY * worldPerPixel
+        val rightPart = floatArrayOf(rx * moveRight, 0f, rz * moveRight)
+        val upPart = floatArrayOf(ux * moveUp, uy * moveUp, uz * moveUp)
+        val fullMove = FloatArray(3) { i -> rightPart[i] + upPart[i] }
+
+        // Full move first; when a bound shortens it, also try sliding along just the
+        // camera's up or right axis and keep the longest. All three stay in the
+        // camera plane, so a drag along a side bound still moves instead of stopping.
+        val applied = listOf(fullMove, upPart, rightPart)
+            .map { clipMove(it) }
+            .maxByOrNull { it[0] * it[0] + it[1] * it[1] + it[2] * it[2] }
+            ?: return false
+        targetPosition = FloatArray(3) { i -> targetPosition[i] + applied[i] }
+        return true
+    }
+
+    /**
+     * Shortens [move] by one factor in 0..1 so the target stays inside the model
+     * bounds, keeping its direction (and so the camera plane). Clamping each axis
+     * would bend it and add depth. Axes already outside can only move back in.
+     */
+    private fun clipMove(move: FloatArray): FloatArray {
+        var scale = 1f
+        for (i in 0..2) {
+            if (move[i] == 0f) continue
+            val limit = boundsCenter[i] +
+                if (move[i] > 0f) boundsHalfExtent[i] else -boundsHalfExtent[i]
+            scale = minOf(scale, maxOf((limit - targetPosition[i]) / move[i], 0f))
         }
-        zoomLevel = (zoomLevel * factor).coerceIn(MIN_ZOOM, MAX_ZOOM)
+        return FloatArray(3) { i -> move[i] * scale }
+    }
+
+    /**
+     * Handles a pinch-to-zoom gesture. Returns true if the camera was updated.
+     */
+    /**
+     * Handles a pinch: [scale] is the change since the previous event (not since
+     * the gesture started), so holding the fingers still no longer keeps zooming.
+     * Zoom both moves the camera closer and narrows the field of view, so the model
+     * grows about with zoom²; the square root makes it follow the fingers 1:1.
+     * Not throttled: a dropped event would lose its share of the pinch.
+     */
+    fun onScale(scale: Float): Boolean {
+        if (scale <= 0f || !scale.isFinite()) return false
+        markInteracting()
+        zoomLevel = (zoomLevel * sqrt(scale)).coerceIn(MIN_ZOOM, MAX_ZOOM)
         return true
     }
 

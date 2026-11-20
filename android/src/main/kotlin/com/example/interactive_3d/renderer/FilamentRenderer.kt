@@ -426,6 +426,12 @@ class FilamentRenderer(
         }
     }
 
+    fun onTranslate(deltaX: Float, deltaY: Float) {
+        if (cameraController.onTranslate(deltaX, deltaY, height)) {
+            camera?.let { cameraController.applyToCamera(it) }
+        }
+    }
+
     fun onScale(scale: Float) {
         if (cameraController.onScale(scale)) {
             // Re-lock render quality during zoom to prevent driver-side blur
