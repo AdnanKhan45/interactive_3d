@@ -26,9 +26,13 @@ jobs:
           - label: "3.44.0"
             version: "3.44.0"
             check_format: true
+            analyze_args: ""
+          # Upstream deprecations (such as material.dart moving to material_ui) land on
+          # stable first; they stay visible but only the pinned job fails on infos.
           - label: stable
             version: ""
             check_format: false
+            analyze_args: "--no-fatal-infos"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -55,7 +59,7 @@ jobs:
           dart format --output=none --set-exit-if-changed "${paths[@]}"
 
       - name: Analyze
-        run: flutter analyze
+        run: flutter analyze ${{ matrix.analyze_args }}
 
       - name: Run tests
         run: |
