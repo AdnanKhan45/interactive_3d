@@ -24,6 +24,7 @@ class SceneManager {
     /// scene to prevent memory accumulation across model loads.
     func cleanupPreviousModel() {
         nodeOpacities.removeAll()
+        cachedBounds = nil
 
         if let scene = scnView?.scene {
             scene.rootNode.enumerateChildNodes { (node, _) in
@@ -136,18 +137,19 @@ class SceneManager {
     }
 
     /// Two-finger drag: moves the camera and its orbit target together in the
-    /// camera plane, so the model follows the fingers. [translation] is the drag
-    /// since the last call, in view points. Moves add up across gestures; the
-    /// target stays inside the model bounds, so the model cannot be lost.
+    /// camera plane, kept inside the model bounds. [translation] is the drag since
+    /// the last call, in view points.
     func translate(by translation: CGPoint) {
         guard let view = scnView, let scene = view.scene,
               let pov = view.pointOfView, let camera = pov.camera,
-              let (lower, upper) = geometryBounds(of: scene) else { return }
+              let target = currentFraming()?.target,
+              let (lower, upper) = clipBounds(of: scene) else { return }
         let height = Float(view.bounds.height)
         guard height > 0 else { return }
 
+        // The controller target is still the origin before SceneKit's first
+        // gesture, so start from the framed target instead.
         let controller = view.defaultCameraController
-        let target = simd_float3(controller.target)
         let distance = simd_distance(pov.simdWorldPosition, target)
         guard distance > 0 else { return }
         // World units covered by one point at the target's distance.
@@ -157,9 +159,8 @@ class SceneManager {
         // The content follows the fingers, so camera and target move the other way.
         let right = -pov.simdWorldRight * Float(translation.x) * worldPerPoint
         let up = pov.simdWorldUp * Float(translation.y) * worldPerPoint
-        // Full move first; when a bound shortens it, also try sliding along just the
-        // camera's up or right axis and keep the longest. All three stay in the
-        // camera plane, so a drag along a side bound still moves instead of stopping.
+        // If a bound shortens the full move, sliding along just up or right may go
+        // further: keep the longest. All three stay in the camera plane.
         let applied = [right + up, up, right]
             .map { Self.clipMove($0, from: target, lower: lower, upper: upper) }
             .max { simd_length($0) < simd_length($1) } ?? .zero
@@ -242,6 +243,16 @@ class SceneManager {
         view.setNeedsDisplay()
     }
 
+    /// Model bounds for clipping a two-finger move. Thin axes get at least a
+    /// tenth of the largest half-extent, so flat models can still be moved.
+    private func clipBounds(of scene: SCNScene) -> (simd_float3, simd_float3)? {
+        guard let (lower, upper) = geometryBounds(of: scene) else { return nil }
+        let center = (lower + upper) / 2
+        let half = (upper - lower) / 2
+        let padded = simd_max(half, simd_float3(repeating: simd_reduce_max(half) * 0.1))
+        return (center - padded, center + padded)
+    }
+
     /// Orbit target and zoom 1.0 camera distance, mirroring
     /// CameraController.fitToBoundingBox on Android.
     private func framing(of scene: SCNScene) -> (target: simd_float3, radius: Float)? {
@@ -271,8 +282,12 @@ class SceneManager {
 
     private static let baseFieldOfView: Float = 45
 
+    /// Computed once per model; cleared by cleanupPreviousModel.
+    private var cachedBounds: (simd_float3, simd_float3)?
+
     /// World-space bounds of the model's geometry, ignoring lights and cameras.
     private func geometryBounds(of scene: SCNScene) -> (simd_float3, simd_float3)? {
+        if let cachedBounds { return cachedBounds }
         var lower = simd_float3(repeating: .infinity)
         var upper = simd_float3(repeating: -.infinity)
         scene.rootNode.enumerateHierarchy { node, _ in
@@ -288,7 +303,9 @@ class SceneManager {
                 upper = simd_max(upper, world)
             }
         }
-        return lower.x.isFinite ? (lower, upper) : nil
+        guard lower.x.isFinite else { return nil }
+        cachedBounds = (lower, upper)
+        return cachedBounds
     }
 
     private func makeCamera(in scene: SCNScene) -> SCNNode {

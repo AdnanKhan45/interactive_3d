@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
@@ -541,87 +542,66 @@ class Interactive3dState extends State<Interactive3d> {
   Offset? _lastFocalPoint;
   int _lastPointerCount = 0;
   double _lastScale = 1.0;
-
-  // A two-finger gesture either zooms or moves the view, never both: the mode is
-  // picked by whichever passes its threshold first and kept until fingers change.
-  _TwoFingerMode _twoFingerMode = _TwoFingerMode.undecided;
-  Offset _twoFingerStartFocal = Offset.zero;
-  double _twoFingerStartScale = 1.0;
-  static const _zoomLockRatio =
-      0.08; // 8% change of the distance between fingers
-  static const _panLockDistance =
-      20.0; // logical pixels of focal point movement
+  ScaleUpdateDetails? _pendingUpdate;
 
   void _handleScaleStart(ScaleStartDetails details) {
-    _lastFocalPoint = details.localFocalPoint;
+    _pendingUpdate = null;
+    _lastFocalPoint = null;
     _lastPointerCount = details.pointerCount;
-    _lastScale = 1.0;
-    _resetTwoFingerMode(details.localFocalPoint, 1.0);
-  }
-
-  void _resetTwoFingerMode(Offset focal, double scale) {
-    _twoFingerMode = _TwoFingerMode.undecided;
-    _twoFingerStartFocal = focal;
-    _twoFingerStartScale = scale;
   }
 
   void _handleScaleUpdate(ScaleUpdateDetails details) {
+    // A finger landing or lifting moves the focal point and restarts the scale:
+    // send what came before, then start over so the jump is not sent.
+    if (details.pointerCount != _lastPointerCount) {
+      _flushScaleUpdate();
+      _lastPointerCount = details.pointerCount;
+      _lastFocalPoint = null;
+    }
+    // Each finger's move arrives as its own update; sending once per frame keeps
+    // one finger moving before the other from reading as a brief zoom.
+    if (_pendingUpdate == null) {
+      SchedulerBinding.instance
+          .scheduleFrameCallback((_) => _flushScaleUpdate());
+    }
+    _pendingUpdate = details;
+  }
+
+  void _flushScaleUpdate() {
+    final details = _pendingUpdate;
+    _pendingUpdate = null;
+    if (details == null || !mounted) return;
     if (_platform == null || _textureId == null) return;
 
-    // When a finger lands or lifts the focal point jumps to the new centroid and
-    // the scale restarts: begin again from there instead of turning the jump into
-    // a move or a zoom.
-    if (details.pointerCount != _lastPointerCount) {
-      _lastPointerCount = details.pointerCount;
+    // The first frame after a start or a finger change only sets the baseline.
+    if (_lastFocalPoint == null) {
       _lastFocalPoint = details.localFocalPoint;
       _lastScale = details.scale;
-      _resetTwoFingerMode(details.localFocalPoint, details.scale);
       return;
     }
 
-    final focalDelta = _lastFocalPoint == null
-        ? Offset.zero
-        : details.localFocalPoint - _lastFocalPoint!;
-    final scaleStep = _lastScale > 0 ? details.scale / _lastScale : 1.0;
-    _lastScale = details.scale;
-    // _lastFocalPoint only advances when a move is sent, so slow drags whose
-    // per-event steps stay under the dispatch threshold still add up.
+    final focalDelta = details.localFocalPoint - _lastFocalPoint!;
 
     if (details.pointerCount < 2) {
-      // One finger orbits.
       _sendDeltaIfMoved('pan', focalDelta, details.localFocalPoint);
       return;
     }
 
-    if (_twoFingerMode == _TwoFingerMode.undecided) {
-      final zoomChange = (details.scale / _twoFingerStartScale - 1).abs();
-      final moved = (details.localFocalPoint - _twoFingerStartFocal).distance;
-      if (zoomChange > _zoomLockRatio) {
-        _twoFingerMode = _TwoFingerMode.zoom;
-      } else if (moved > _panLockDistance) {
-        _twoFingerMode = _TwoFingerMode.pan;
-      } else {
-        // Movement before the mode is picked is not applied: follow the fingers
-        // so that picking pan does not replay it as one jump.
-        _lastFocalPoint = details.localFocalPoint;
-        return;
-      }
+    // Two fingers zoom and move the view in the same gesture. Scale is sent as
+    // the step since the last one, so the steps multiply to the full pinch.
+    if (_lastScale > 0 && details.scale != _lastScale) {
+      _platform!.onTouchEvent(
+        textureId: _textureId!,
+        action: 'scale',
+        scale: details.scale / _lastScale,
+      );
     }
-
-    if (_twoFingerMode == _TwoFingerMode.zoom) {
-      _lastFocalPoint = details.localFocalPoint;
-      if (scaleStep != 1.0) {
-        _platform!.onTouchEvent(
-            textureId: _textureId!, action: 'scale', scale: scaleStep);
-      }
-    } else {
-      // Two fingers move the view: the model follows them.
-      _sendDeltaIfMoved('translate', focalDelta, details.localFocalPoint);
-    }
+    _lastScale = details.scale;
+    _sendDeltaIfMoved('translate', focalDelta, details.localFocalPoint);
   }
 
-  /// Sends [delta] once it is big enough and only then moves the baseline to
-  /// [focal]; smaller deltas keep adding up instead of being dropped.
+  /// Sends [delta] once it passes 0.5 px and only then moves the baseline to
+  /// [focal], so slow drags add up instead of being dropped.
   void _sendDeltaIfMoved(String action, Offset delta, Offset focal) {
     if (delta.distance <= 0.5) return;
     _sendDelta(action, delta);
@@ -856,5 +836,3 @@ class Interactive3dState extends State<Interactive3d> {
     super.dispose();
   }
 }
-
-enum _TwoFingerMode { undecided, zoom, pan }
