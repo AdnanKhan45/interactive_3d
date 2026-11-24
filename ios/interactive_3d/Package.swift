@@ -15,7 +15,7 @@ let package = Package(
   ],
   dependencies: [
     .package(name: "FlutterFramework", path: "../FlutterFramework"),
-    .package(url: "https://github.com/magicien/GLTFSceneKit.git", "0.3.0"..<"0.4.0")
+    .package(url: "https://github.com/magicien/GLTFSceneKit.git", "0.3.0"..<"0.5.0")
   ],
   targets: [
     .target(
