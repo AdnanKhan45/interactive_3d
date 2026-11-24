@@ -62,7 +62,7 @@ class Interactive3dController {
   }
 
   /// Returns the camera to the view shown right after the model loaded,
-  /// including `defaultZoom`, undoing any rotation and zoom.
+  /// including `defaultZoom`, undoing any rotation, zoom, and two-finger move.
   Future<void> resetCamera() async {
     _ensureAttached();
     await _state!.resetCamera();
