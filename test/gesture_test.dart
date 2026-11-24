@@ -179,4 +179,25 @@ void main() {
       expect(t['scale'] as double, closeTo(1.0, 0.01), reason: '$t');
     }
   });
+
+  testWidgets('motion in the frame a finger lands in is still sent',
+      (tester) async {
+    await pumpViewer(tester);
+    final a = await tester.startGesture(const Offset(200, 300), pointer: 1);
+    for (var i = 0; i < 10; i++) {
+      await a.moveBy(const Offset(5, 0));
+      await tester.pump();
+    }
+    final before = sumDeltas('pan');
+    // No frame between this move, the second finger landing and its first
+    // move, which is when Flutter restarts the gesture with onStart.
+    await a.moveBy(const Offset(30, 0));
+    final b = await tester.startGesture(const Offset(450, 300), pointer: 2);
+    await b.moveBy(const Offset(0, 1));
+    await tester.pump();
+    await a.up();
+    await b.up();
+
+    expect((sumDeltas('pan') - before).dx, closeTo(30, 1e-9));
+  });
 }

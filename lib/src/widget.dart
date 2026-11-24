@@ -540,24 +540,17 @@ class Interactive3dState extends State<Interactive3d> {
   }
 
   Offset? _lastFocalPoint;
-  int _lastPointerCount = 0;
   double _lastScale = 1.0;
   ScaleUpdateDetails? _pendingUpdate;
 
+  // Also called when a finger lands or lifts mid-gesture, after onEnd: send the
+  // motion still pending, then start over so the focal point jump is not sent.
   void _handleScaleStart(ScaleStartDetails details) {
-    _pendingUpdate = null;
+    _flushScaleUpdate();
     _lastFocalPoint = null;
-    _lastPointerCount = details.pointerCount;
   }
 
   void _handleScaleUpdate(ScaleUpdateDetails details) {
-    // A finger landing or lifting moves the focal point and restarts the scale:
-    // send what came before, then start over so the jump is not sent.
-    if (details.pointerCount != _lastPointerCount) {
-      _flushScaleUpdate();
-      _lastPointerCount = details.pointerCount;
-      _lastFocalPoint = null;
-    }
     // Each finger's move arrives as its own update; sending once per frame keeps
     // one finger moving before the other from reading as a brief zoom.
     if (_pendingUpdate == null) {

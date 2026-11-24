@@ -33,6 +33,9 @@ internal class CameraController {
         // Thin axes get at least this share of the largest half-extent, so a
         // two-finger move on a flat model is not clipped to zero.
         private const val MIN_HALF_EXTENT_RATIO = 0.1f
+        // Orbit radians per render pixel, set to keep the orbit speed of
+        // earlier releases now that no move is dropped.
+        private const val ORBIT_RADIANS_PER_PIXEL = 0.01f
     }
 
     // Spherical orbit state
@@ -151,8 +154,8 @@ internal class CameraController {
     fun onPan(deltaX: Float, deltaY: Float): Boolean {
         markInteracting()
 
-        orbitAngleY -= deltaX * 0.02f
-        orbitAngleX += deltaY * 0.02f
+        orbitAngleY -= deltaX * ORBIT_RADIANS_PER_PIXEL
+        orbitAngleX += deltaY * ORBIT_RADIANS_PER_PIXEL
         orbitAngleX = orbitAngleX.coerceIn(-1.4f, 1.4f)
         return true
     }
