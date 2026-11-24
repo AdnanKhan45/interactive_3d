@@ -57,7 +57,7 @@
 - A loading widget that stays up until the model is drawn, an error widget, and load callbacks.
 
 **Interaction**
-- Drag to rotate, pinch to zoom, tap to select.
+- Drag to rotate, pinch to zoom, drag with two fingers to move the view, tap to select.
 - Read the selected parts (named nodes) back in your app, preselect parts by name, and give parts their own highlight color.
 - Ordered selection rules, saved selections that survive app restarts, and show or hide groups of parts.
 - Camera controls for your own buttons: reset the view, zoom in and out by a step, or jump to a zoom level. The same zoom value looks the same on Android and iOS.
@@ -86,7 +86,7 @@ Requires Flutter `>= 3.44.0`.
 | Lighting | `iblPath` / `skyboxPath` (`.ktx`) | `iOSBackgroundEnvPath` (HDR/EXR background) |
 | Default selection color | Green | Red. Set `selectionColor` to match both. |
 | Starting view without `defaultZoom` | Zoom 1.0 framing | SceneKit's own framing |
-| Pinch range | 0.5 to 3.0 | Not limited |
+| Pinch range | 0.5 to 10.0 | Not limited |
 
 ## Installation
 

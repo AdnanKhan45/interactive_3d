@@ -225,6 +225,9 @@ class Interactive3dTextureEntry(
     fun onPan(deltaX: Float, deltaY: Float) =
         mainHandler.post { filamentRenderer?.onPan(deltaX, deltaY) }
 
+    fun onTranslate(deltaX: Float, deltaY: Float) =
+        mainHandler.post { filamentRenderer?.onTranslate(deltaX, deltaY) }
+
     fun onScale(scale: Float) =
         mainHandler.post { filamentRenderer?.onScale(scale) }
 

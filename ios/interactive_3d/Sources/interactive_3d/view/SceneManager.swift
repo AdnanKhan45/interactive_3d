@@ -24,6 +24,7 @@ class SceneManager {
     /// scene to prevent memory accumulation across model loads.
     func cleanupPreviousModel() {
         nodeOpacities.removeAll()
+        cachedBounds = nil
 
         if let scene = scnView?.scene {
             scene.rootNode.enumerateChildNodes { (node, _) in
@@ -59,6 +60,7 @@ class SceneManager {
     /// external files keyed by path relative to the model.
     func loadModel(modelBytes: Data, name: String, resources: [String: Data]) throws {
         cleanupPreviousModel()
+        translatedTarget = nil
 
         let scene: SCNScene
         do {
@@ -98,13 +100,15 @@ class SceneManager {
     /// Frames the model the way the Android renderer does at [zoomLevel], so the
     /// same value shows the same picture on both platforms.
     func setCameraZoomLevel(_ zoomLevel: Float) {
-        frame(zoom: zoomLevel, fromFront: false)
+        frame(zoom: zoomLevel, fromFront: false, framing: currentFraming())
     }
 
     /// Returns to the view shown after load: Android-style framing at [zoom], or
     /// the native starting view when no zoom was set.
     func resetCamera(zoom: Float?) {
         guard let view = scnView else { return }
+        // The one place that recenters on the model after a two-finger move.
+        translatedTarget = nil
         view.defaultCameraController.stopInertia()
         if let zoom = zoom {
             frame(zoom: zoom, fromFront: true)
@@ -120,9 +124,9 @@ class SceneManager {
     /// Adds [delta] to the zoom level read from the live camera, so it also
     /// accounts for pinching. Clamped like CameraController.zoomBy on Android.
     func zoomBy(_ delta: Float) {
-        guard delta.isFinite, let view = scnView, let scene = view.scene,
+        guard delta.isFinite, let view = scnView,
               let pov = view.pointOfView, let camera = pov.camera,
-              let framing = framing(of: scene) else { return }
+              let framing = currentFraming() else { return }
         let distance = simd_distance(pov.simdWorldPosition, framing.target)
         guard distance > 0 else { return }
         let current = Self.zoomLevel(
@@ -130,6 +134,69 @@ class SceneManager {
                 / (distance * tan(Float(camera.fieldOfView) * .pi / 360)))
         let next = min(max(current + delta, min(current, 0.5)), max(current, 3.0))
         frame(zoom: next, fromFront: false, framing: framing)
+    }
+
+    /// Two-finger drag: moves the camera and its orbit target together in the
+    /// camera plane, kept inside the model bounds. [translation] is the drag since
+    /// the last call, in view points.
+    func translate(by translation: CGPoint) {
+        guard let view = scnView, let scene = view.scene,
+              let pov = view.pointOfView, let camera = pov.camera,
+              let target = currentFraming()?.target,
+              let (lower, upper) = clipBounds(of: scene) else { return }
+        let height = Float(view.bounds.height)
+        guard height > 0 else { return }
+
+        // The controller target is still the origin before SceneKit's first
+        // gesture, so start from the framed target instead.
+        let controller = view.defaultCameraController
+        let distance = simd_distance(pov.simdWorldPosition, target)
+        guard distance > 0 else { return }
+        // World units covered by one point at the target's distance.
+        let fov = Float(camera.fieldOfView) * .pi / 180
+        let worldPerPoint = 2 * distance * tan(fov / 2) / height
+
+        // The content follows the fingers, so camera and target move the other way.
+        let right = -pov.simdWorldRight * Float(translation.x) * worldPerPoint
+        let up = pov.simdWorldUp * Float(translation.y) * worldPerPoint
+        // If a bound shortens the full move, sliding along just up or right may go
+        // further: keep the longest. All three stay in the camera plane.
+        let applied = [right + up, up, right]
+            .map { Self.clipMove($0, from: target, lower: lower, upper: upper) }
+            .max { simd_length($0) < simd_length($1) } ?? .zero
+        let newTarget = target + applied
+        controller.stopInertia()
+        pov.simdWorldPosition += applied
+        controller.target = SCNVector3(newTarget)
+        translatedTarget = newTarget
+        // SceneKit's default camera is outside the scene graph: ask for a frame.
+        view.setNeedsDisplay()
+    }
+
+    /// Orbit target set by a two-finger move, kept by relative and absolute zoom
+    /// (like on Android) and cleared by resetCamera and by loading a new model.
+    private var translatedTarget: simd_float3?
+
+    /// The model framing, centered on the translated target when there is one.
+    private func currentFraming() -> (target: simd_float3, radius: Float)? {
+        guard let scene = scnView?.scene, let framing = framing(of: scene) else { return nil }
+        return (translatedTarget ?? framing.target, framing.radius)
+    }
+
+    /// Shortens [move] by one factor in 0...1 so [start] + move stays inside the
+    /// box, keeping its direction (and so the camera plane). Per-axis clamping
+    /// would bend it and add depth. Axes already outside can only move back in.
+    static func clipMove(
+        _ move: simd_float3, from start: simd_float3,
+        lower: simd_float3, upper: simd_float3
+    ) -> simd_float3 {
+        var scale: Float = 1
+        for axis in 0..<3 where move[axis] != 0 {
+            let limit = move[axis] > 0 ? upper[axis] : lower[axis]
+            let room = max((limit - start[axis]) / move[axis], 0)
+            scale = min(scale, room)
+        }
+        return move * scale
     }
 
     /// Saves the starting view once SceneKit has created its camera.
@@ -176,6 +243,16 @@ class SceneManager {
         view.setNeedsDisplay()
     }
 
+    /// Model bounds for clipping a two-finger move. Thin axes get at least a
+    /// tenth of the largest half-extent, so flat models can still be moved.
+    private func clipBounds(of scene: SCNScene) -> (simd_float3, simd_float3)? {
+        guard let (lower, upper) = geometryBounds(of: scene) else { return nil }
+        let center = (lower + upper) / 2
+        let half = (upper - lower) / 2
+        let padded = simd_max(half, simd_float3(repeating: simd_reduce_max(half) * 0.1))
+        return (center - padded, center + padded)
+    }
+
     /// Orbit target and zoom 1.0 camera distance, mirroring
     /// CameraController.fitToBoundingBox on Android.
     private func framing(of scene: SCNScene) -> (target: simd_float3, radius: Float)? {
@@ -205,8 +282,12 @@ class SceneManager {
 
     private static let baseFieldOfView: Float = 45
 
+    /// Computed once per model; cleared by cleanupPreviousModel.
+    private var cachedBounds: (simd_float3, simd_float3)?
+
     /// World-space bounds of the model's geometry, ignoring lights and cameras.
     private func geometryBounds(of scene: SCNScene) -> (simd_float3, simd_float3)? {
+        if let cachedBounds { return cachedBounds }
         var lower = simd_float3(repeating: .infinity)
         var upper = simd_float3(repeating: -.infinity)
         scene.rootNode.enumerateHierarchy { node, _ in
@@ -222,7 +303,9 @@ class SceneManager {
                 upper = simd_max(upper, world)
             }
         }
-        return lower.x.isFinite ? (lower, upper) : nil
+        guard lower.x.isFinite else { return nil }
+        cachedBounds = (lower, upper)
+        return cachedBounds
     }
 
     private func makeCamera(in scene: SCNScene) -> SCNNode {

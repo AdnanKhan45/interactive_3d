@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
@@ -539,34 +540,74 @@ class Interactive3dState extends State<Interactive3d> {
   }
 
   Offset? _lastFocalPoint;
+  double _lastScale = 1.0;
+  ScaleUpdateDetails? _pendingUpdate;
 
+  // Also called when a finger lands or lifts mid-gesture, after onEnd: send the
+  // motion still pending, then start over so the focal point jump is not sent.
   void _handleScaleStart(ScaleStartDetails details) {
-    _lastFocalPoint = details.localFocalPoint;
+    _flushScaleUpdate();
+    _lastFocalPoint = null;
   }
 
   void _handleScaleUpdate(ScaleUpdateDetails details) {
+    // Each finger's move arrives as its own update; sending once per frame keeps
+    // one finger moving before the other from reading as a brief zoom.
+    if (_pendingUpdate == null) {
+      SchedulerBinding.instance
+          .scheduleFrameCallback((_) => _flushScaleUpdate());
+    }
+    _pendingUpdate = details;
+  }
+
+  void _flushScaleUpdate() {
+    final details = _pendingUpdate;
+    _pendingUpdate = null;
+    if (details == null || !mounted) return;
     if (_platform == null || _textureId == null) return;
 
-    if (details.scale != 1.0) {
+    // The first frame after a start or a finger change only sets the baseline.
+    if (_lastFocalPoint == null) {
+      _lastFocalPoint = details.localFocalPoint;
+      _lastScale = details.scale;
+      return;
+    }
+
+    final focalDelta = details.localFocalPoint - _lastFocalPoint!;
+
+    if (details.pointerCount < 2) {
+      _sendDeltaIfMoved('pan', focalDelta, details.localFocalPoint);
+      return;
+    }
+
+    // Two fingers zoom and move the view in the same gesture. Scale is sent as
+    // the step since the last one, so the steps multiply to the full pinch.
+    if (_lastScale > 0 && details.scale != _lastScale) {
       _platform!.onTouchEvent(
         textureId: _textureId!,
         action: 'scale',
-        scale: details.scale,
+        scale: details.scale / _lastScale,
       );
     }
+    _lastScale = details.scale;
+    _sendDeltaIfMoved('translate', focalDelta, details.localFocalPoint);
+  }
 
-    if (_lastFocalPoint != null) {
-      final delta = details.localFocalPoint - _lastFocalPoint!;
-      if (delta.distance > 0.5) {
-        _platform!.onTouchEvent(
-          textureId: _textureId!,
-          action: 'pan',
-          deltaX: delta.dx * _renderRatio,
-          deltaY: delta.dy * _renderRatio,
-        );
-      }
-    }
-    _lastFocalPoint = details.localFocalPoint;
+  /// Sends [delta] once it passes 0.5 px and only then moves the baseline to
+  /// [focal], so slow drags add up instead of being dropped.
+  void _sendDeltaIfMoved(String action, Offset delta, Offset focal) {
+    if (delta.distance <= 0.5) return;
+    _sendDelta(action, delta);
+    _lastFocalPoint = focal;
+  }
+
+  void _sendDelta(String action, Offset delta) {
+    _platform!.onTouchEvent(
+      textureId: _textureId!,
+      action: action,
+      deltaX: delta.dx * _renderRatio,
+      deltaY: delta.dy * _renderRatio,
+    );
   }
 
   // ---------------------------------------------------------------------------
