@@ -23,6 +23,9 @@ let package = Package(
       dependencies: [
         .product(name: "FlutterFramework", package: "FlutterFramework"),
         "GLTFSceneKit"
+      ],
+      resources: [
+        .process("PrivacyInfo.xcprivacy")
       ]
     )
   ]
