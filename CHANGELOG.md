@@ -1,3 +1,11 @@
+## 2.6.0
+
+* 20th release of `interactive_3d`: **Move the View** ✋
+- Drag with two fingers to move the view on Android and iOS, so tall or wide models can be explored end to end. Pinch and move work together, and `resetCamera()` recenters the model.
+- Smoother Android gestures: no touch movement is dropped any more, pinch follows the fingers instead of speeding up, and pinch can zoom in to 10x. `zoomBy` still stays within 0.5 to 3.0.
+- iOS: builds alongside `arkit_plugin` 1.4 and later under Swift Package Manager (GLTFSceneKit 0.3 to 0.4), and the plugin now ships its privacy manifest, so App Store uploads no longer warn about its UserDefaults use.
+- Thanks to @progressify and @JI4JUN for these contributions. Try the two-finger move on any page in the example app.
+
 ## 2.5.0
 
 * 19th release of `interactive_3d`: **Unselectable Parts** 🚫
