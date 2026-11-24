@@ -5,8 +5,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/magicien/GLTFSceneKit.git",
       "state" : {
-        "revision" : "8bd50d2887c4e0ccc50b9e576768c1800ae15c50",
-        "version" : "0.3.0"
+        "revision" : "a9587ec5c6515ee7d036533fdd909815a9a718ef",
+        "version" : "0.4.1"
       }
     }
   ],
